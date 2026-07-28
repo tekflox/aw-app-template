@@ -26,6 +26,13 @@
         "name": "hello",
         "installer": "scripts/install_hello.sh"
       }
+    ],
+    "skills": [
+      {
+        "id": "aw-create-app",
+        "path": "skills/aw-create-app/SKILL.md",
+        "description": "How to author a decoupled aw-workspace app from this template — manifest, tiers, capabilities, contributes, window widgets, install + marketplace release."
+      }
     ]
   },
   "config_schema": {

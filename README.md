@@ -102,3 +102,27 @@ bump, tag, or marketplace catalog sync happens. See that repo's
 `apps.json` automatically (name/description/publisher/resource_estimate —
 `has_config`/`bootstrap`/`icon`/`tags`/`category` are set once by hand on
 first listing and not auto-synced afterward).
+
+## Contributing a skill (`contributes.skills`)
+
+This app ships a **skill** — `skills/aw-create-app/SKILL.md` — that teaches an
+agent how to author a new decoupled app from this template (manifest, tiers,
+the capability catalog, contributes, the window widget vocabulary, install +
+marketplace release). It's declared in the manifest:
+
+```jsonc
+"contributes": {
+  "skills": [
+    { "id": "aw-create-app", "path": "skills/aw-create-app/SKILL.md",
+      "description": "How to author a decoupled aw-workspace app." }
+  ]
+}
+```
+
+Convention for any app that wants to teach an agent how to use it: drop a
+`skills/<id>/SKILL.md` (YAML frontmatter with `name` + `description`) and list
+it under `contributes.skills`. **Runtime note (2026-07-28):** aw-workspace's
+`src/apps/` does not yet *consume* `contributes.skills` — installing the app
+does not auto-register the skill for agents yet. The declaration + file are
+the forward contract; wiring the runtime to surface app-contributed skills is
+tracked separately.

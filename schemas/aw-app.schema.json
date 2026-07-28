@@ -48,6 +48,18 @@
         },
         "windows": { "type": "array" },
         "nav": { "type": "array" },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "path"],
+            "properties": {
+              "id": { "type": "string" },
+              "path": { "type": "string" },
+              "description": { "type": "string" }
+            }
+          }
+        },
         "settings_panels": { "type": "array" },
         "frontend": { "type": "object" },
         "services": { "type": "array" },
