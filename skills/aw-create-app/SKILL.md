@@ -73,6 +73,9 @@ Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.sche
 ## 3. Capability catalog (`permissions`)
 
 Only request what you use — each is enforced by the runtime's `AppContext`.
+Authoritative source: aw-workspace `src/apps/capabilities.py` (mirrored in
+aw-backend `src/api/app_capabilities.py`) — keep `schemas/aw-app.schema.json`
+in this repo in sync if that catalog ever grows.
 
 | Capability | Risk | Grants |
 |---|---|---|
@@ -90,6 +93,15 @@ Only request what you use — each is enforced by the runtime's `AppContext`.
 | `ui:slots:<slot>` | low | render into a named SPA slot (e.g. `core.nav.workspace`) |
 | `config:extend:<app>` | high | write config into another app's extension point |
 
+> **`routes:local` (proposed, NOT yet live)** — ADR Decision 2
+> (`docs/knowledge_base/docs/architecture/adr-app-front-back-routes-dual-mode.md`)
+> proposes a `routes:local` capability that lets specific sub-paths of your
+> app skip the JWT check when called from `127.0.0.1`/`::1` (agent-driven
+> endpoints, e.g. a future `aw-app-devctl` `/eval`). As of 2026-07-28 this
+> capability does not exist in `capabilities.py` and the `local_paths`
+> manifest field has no runtime effect — do not request it yet. See §4 for
+> the documented (forward-looking) shape.
+
 ## 4. What an app contributes (`contributes`)
 
 - **`windows`** — declarative windows opened from the app's card. Each:
@@ -99,11 +111,32 @@ Only request what you use — each is enforced by the runtime's `AppContext`.
   in the **Apps grid** (the launcher reads `GET /api/apps`); nav is only for
   apps that also want a persistent menu entry.
 - **`routes`** — `[{ "prefix": "/api/apps/myapp" }]` (needs `routes:register`).
+  See §5 for the full backend contract, and the not-yet-live `local_paths`
+  escape:
+  ```jsonc
+  "contributes": {
+    "routes": [
+      {
+        "prefix": "/api/apps/myapp",
+        // Forward-looking (ADR Decision 2) — needs "routes:local", not live yet.
+        "local_paths": ["/eval", "/tabs"]
+      }
+    ]
+  }
+  ```
 - **`system_clis`** — `[{ "name": "hello", "installer": "scripts/install_hello.sh" }]`
   (needs `commands:install`).
 - **`db`** — app-owned tables (needs `db:own-tables`).
 - **`frontend`** — a JS bundle mounted into granted slots (needs `ui:code`;
-  unsigned apps are downgraded to iframe mode).
+  unsigned apps are downgraded to iframe mode). See §6 for the source layout:
+  ```jsonc
+  "contributes": {
+    "frontend": {
+      "mode": "component",       // or "iframe" / "declarative" — see loadPlugin.js
+      "bundle": "ui/dist/myapp.js"
+    }
+  }
+  ```
 
 ### Window widget vocabulary (`windows/*.json`)
 
@@ -114,7 +147,139 @@ Only request what you use — each is enforced by the runtime's `AppContext`.
 subdomain** `https://<app_id>.app.<slug>.workspace.<apex>`, honoring the LAN
 fast-path; use this to surface a Tier-2 container's own web UI).
 
-## 5. How it shows up + install
+## 5. Backend routes (HTTP + WS)
+
+Every app that has a server side ships exactly ONE mode-agnostic factory,
+`build_routes() -> FastAPI`, with **relative** paths (no `/api/apps/<id>`
+prefix inside the app — see `template_app/routes.py`):
+
+```python
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+
+def build_routes() -> FastAPI:
+    app = FastAPI(title="myapp")
+
+    @app.get("/hello")
+    async def hello():
+        return {"message": "hi"}
+
+    @app.websocket("/ws/echo")           # canonical: /ws/<name>, never bare "/ws"
+    async def ws_echo(ws: WebSocket):
+        await ws.accept()
+        try:
+            while True:
+                await ws.send_text(await ws.receive_text())
+        except WebSocketDisconnect:
+            pass
+
+    return app
+```
+
+Register it in `plugin.py`'s `activate(ctx)` via the gated facade:
+`ctx.routes.register(build_routes())` — the runtime mounts it at
+`/api/apps/<id>` behind `IdentityGuard` (bearer/cookie for HTTP, `?token=`
+then cookie for WS). **Apps never implement their own auth in integrated
+mode.** Full canonical path shapes:
+
+```
+/api/apps/<id>/...          HTTP routes
+/api/apps/<id>/ws/<name>     WebSocket routes (root /ws/* stays core-only)
+```
+
+`local_paths` (agent-callable, no-JWT-from-localhost endpoints) is a
+**proposed, not-yet-live** manifest extension — see §3/§4, don't request the
+`routes:local` capability until it lands in `capabilities.py`.
+
+## 6. Frontend code (`register(host)`, headless services, host helpers)
+
+A frontend contribution ships `ui/src/plugin.js` with ONE required export:
+
+```js
+export function register(host) {
+  // host.React / host.h / host.sdk are the SHARED instances — never import
+  // your own React (breaks the "exactly one React instance" invariant).
+  function MyPill() {
+    const [msg, setMsg] = host.React.useState('…');
+    host.React.useEffect(() => {
+      host.sdk.api.fetch('/api/apps/myapp/hello')
+        .then((r) => r.json()).then((d) => setMsg(d.message));
+    }, []);
+    return host.h('span', {}, msg);
+  }
+  host.registerSlot('core.nav', MyPill);   // needs "ui:slots:core.nav" grant
+
+  // Headless pattern — background work with NO slot, teardown via onDispose:
+  const ws = new WebSocket(host.sdk.api.wsUrl('/api/apps/myapp/ws/echo'));
+  host.onDispose(() => ws.close());
+}
+export default register;
+```
+
+`register(host)` **may be headless** — start background work (open a WS,
+install listeners) without registering any slot, as long as every teardown
+goes through `host.onDispose(fn)`. This is the sanctioned pattern for a
+client that has no UI of its own to show (e.g. a future devctl client).
+
+`host.app.{apiUrl,fetch,wsUrl}` scoped helpers (`app.apiUrl('/hello')` →
+`/api/apps/<id>/hello`, no hand-built prefix) are **proposed in ADR Decision
+3 but not yet landed** in aw-frontend's `pluginHost.js` — until then, build
+the `/api/apps/<id>/...` prefix yourself (see `ui/src/plugin.js` in this
+repo) and use `host.sdk.api.fetch`/`host.sdk.api.wsUrl` for the actual
+network call (those two already exist and are BYOD-correct — never
+hand-build a raw `fetch()`/`new WebSocket()` URL yourself).
+
+Only `component` mode (needs `ui:code`, **signed/marketplace-only**) runs
+`register(host)` at all — an unsigned/side-loaded install is silently
+downgraded to `iframe` mode (`loadPlugin.js`'s `effectiveMode()`).
+
+## 7. Standalone mode
+
+Ship `<pkg>/__main__.py` so your app runs with `python -m <pkg>` completely
+outside the workspace runtime — useful for developing/demoing the UI, or as
+a piloted service on its own (ADR Decision 4):
+
+```python
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from .routes import build_routes
+
+def build_standalone_app() -> FastAPI:
+    app = FastAPI()
+    app.mount("/api/apps/myapp", build_routes())     # SAME prefix as integrated
+    app.mount("/", StaticFiles(directory="ui/dist", html=True), name="ui")
+    return app
+```
+
+Declare it (optional, tolerated forward-compatibly by the v1 validator):
+
+```jsonc
+"runtime": {
+  "entrypoint": "myapp_app.plugin:MyAppPlugin",
+  "standalone": { "module": "myapp_app", "default_port": 9400 }
+}
+```
+
+**No `IdentityGuard` in standalone** — that's runtime machinery, not app
+code. Default posture: bind `127.0.0.1`. A shared-token/`AW_APP_TOKEN` gate
+is the app's own responsibility if you deploy it more openly. See
+`template_app/__main__.py` for the full pattern, and `ui/vite.config.js` /
+`ui/src/standalone.js` for the matching frontend half (same `client.js`
+core as the plugin bundle, just same-origin relative URLs instead of
+`host.sdk.api.*`).
+
+## 8. What stays in core (nothing of yours)
+
+The workspace runtime — not your app — owns: the mount point
+(`/api/apps/<id>`), the `IdentityGuard` auth check on every integrated HTTP
+and WS request, serving your built bundle from `<pkg>/ui/dist/` at
+`/api/apps/<id>/ui/<file>`, the contributions/slot-registry feed the SPA
+reads, and the single shared React/SDK instance every `component`-mode
+bundle resolves through `window.__AW_PLUGIN_HOST__`. **Never**: add a new
+root-level route or WS path for an app feature (`/ws/devctl` was the
+mistake this ADR undoes), implement your own auth on an integrated route,
+or bundle your own copy of React into a plugin bundle.
+
+## 9. How it shows up + install
 
 - Installed apps live in `~/agentic-workspace/apps/<id>/`; the runtime loads
   their manifests and serves `GET /api/apps` (list) + `GET /api/apps/-/contributions`
@@ -126,19 +291,24 @@ fast-path; use this to surface a Tier-2 container's own web UI).
   (public, tokenless raw-GET). Ship `.github/workflows/release.yml` (see this
   repo) to cut versioned releases; the catalog references the repo.
 
-## 6. Reference apps (read these before building)
+## 10. Reference apps (read these before building)
 
-- `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `hello` CLI).
+- `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `hello`
+  CLI) + `routes:register`/`ui:code` (a `/hello` + `/ws/echo` sub-app, a
+  `core.nav` slot component, and standalone mode — §5–§7 above).
 - `aw-app-whiteboard` — Tier-1 + `routes:register` + `db:own-tables` + a window.
 - `aw-app-devctl` — Tier-1 + `routes:register` (talks CDP to another app's container).
 - `aw-app-browser` — Tier-2 container + `app_iframe` window → external subdomain (noVNC).
 
-## 7. Checklist
+## 11. Checklist
 
 1. Copy this repo → `aw-app-<name>`; rename `template_app/`, `id`, `name`, entrypoint.
 2. Pick the tier; declare only the capabilities you use.
-3. Add your `contributes` (window for UI, routes for a backend, etc.).
-4. `python tests/validate_manifest.py` green; `tests/standalone_test.sh` green.
+3. Add your `contributes` (window for UI, routes for a backend, frontend
+   bundle, etc. — §4–§7).
+4. `python tests/validate_manifest.py` green; `pytest tests/` green (routes
+   TestClient + standalone boot smoke); `npm run build` in `ui/` if you have
+   a frontend; `tests/standalone_test.sh` green.
 5. Push to `github.com/tekflox/aw-app-<name>`; wire `release.yml`; add to the
    marketplace catalog.
 6. Install and confirm the card shows in the Apps grid and opens.

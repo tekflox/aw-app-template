@@ -19,7 +19,16 @@
         "entrypoint": { "type": "string" },
         "pip_requires": { "type": "array", "items": { "type": "string" } },
         "image": { "type": "string" },
-        "port": { "type": "integer" }
+        "port": { "type": "integer" },
+        "standalone": {
+          "type": "object",
+          "description": "ADR Decision 4 (adr-app-front-back-routes-dual-mode.md) — optional, tolerated forward-compatibly. Declares this app is runnable via `python -m <module>` outside the workspace runtime.",
+          "required": ["module", "default_port"],
+          "properties": {
+            "module": { "type": "string", "minLength": 1 },
+            "default_port": { "type": "integer", "exclusiveMinimum": 0 }
+          }
+        }
       }
     },
     "permissions": {

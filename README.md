@@ -10,9 +10,13 @@ fix that's landed on that pipeline so far (test-gating before release,
 correct permissions ceiling, auto-merge).
 
 It's a real, working app — not just files. `hello` installs one trivial CLI
-that prints a configurable greeting, so cloning this template and pushing to
-`master` gives you a green CI run, a tagged release, and a marketplace
-catalog entry before you've changed a single line.
+that prints a configurable greeting, contributes a tiny backend sub-app
+(`GET /hello` + `WS /ws/echo`) and a `core.nav` frontend slot, and runs
+standalone too (`python -m template_app`) — so cloning this template and
+pushing to `master` gives you a green CI run, a tagged release, and a
+marketplace catalog entry before you've changed a single line. See
+`docs/knowledge_base/docs/architecture/adr-app-front-back-routes-dual-mode.md`
+(Decision 6) for the design this scaffold implements.
 
 ## Use this template
 
@@ -32,31 +36,47 @@ Then rename everything marked **TEMPLATE** in comments and every `hello`/
    `contributes.system_clis`, `config_schema` (or remove it if your app has
    no config knobs — see `aw-app-brew`'s manifest for a config-free example).
 2. **`template_app/`** — rename the directory + the class in `plugin.py`
-   (and update `runtime.entrypoint` in `aw-app.json` to match). If your app
-   needs more than "install some CLIs" (a settings/config route, a
-   background service, a frontend nav entry), don't force it into this
-   shape — look at a sibling app that already does what you need instead:
-   - `aw-app-git` — a settings panel + OAuth device-flow login route.
-   - `aw-app-presentations` / `aw-app-whiteboard` — `contributes.nav` +
-     `contributes.frontend` (a top-nav entry + window).
-   - `aw-app-browser` — `tier: container` (Tier-2, a sidecar container
-     instead of in-process Python).
+   (and update `runtime.entrypoint` in `aw-app.json` to match). Keep,
+   change, or delete each piece independently — they're not all-or-nothing:
+   - `installer.py` / `scripts/` — the `hello` CLI install pattern
+     (`commands:install`). Delete if your app has no CLI.
+   - `routes.py` / `plugin.py`'s `ctx.routes.register(...)` — the backend
+     sub-app pattern (`routes:register`, GET + WS). Delete if your app has
+     no backend routes.
+   - `__main__.py` — the standalone-mode entry (`python -m <pkg>`). Delete
+     if your app only ever runs integrated.
+   - See the **`aw-create-app`** skill (`skills/aw-create-app/SKILL.md`,
+     §5–§8) for the full backend-routes / frontend-code / standalone
+     contract, or a sibling app for a bigger example of one piece:
+     - `aw-app-git` — a settings panel + OAuth device-flow login route.
+     - `aw-app-whiteboard` — `contributes.nav` + `contributes.frontend`
+       (a top-nav entry + window), `db:own-tables`.
+     - `aw-app-devctl` — `routes:register` talking CDP to another app's
+       container.
+     - `aw-app-browser` — `tier: container` (Tier-2, a sidecar container
+       instead of in-process Python).
 3. **`scripts/`** — replace `install_hello.sh` with your app's real
    installer(s) (one script per CLI is the convention, but a single script
    installing several related tools — like `aw-app-essentials`'s Node.js
    toolkit — is fine too). Keep `uninstall.sh` in sync — it's the one
    script the framework's journal reverse-replay calls on uninstall, so it
    must reverse *everything* every `install_*.sh` here does.
-4. **`tests/`** — `validate_manifest.py` needs no changes (fully generic).
+4. **`ui/`** — rename `SLUG` in `src/plugin.js`/`src/standalone.js` (and
+   `template_app/__main__.py`'s `SLUG`) to match your app's `id`. Delete the
+   whole directory (+ `contributes.frontend`/`ui:code`/`ui:slots:*` in
+   `aw-app.json`) if your app has no frontend code — a declarative `windows`
+   spec doesn't need any of this.
+5. **`tests/`** — `validate_manifest.py` needs no changes (fully generic).
    Update `test_installer.py`'s assertions to match your real
-   `installer.py` functions, and `standalone_test.sh` to install/check your
-   real CLI(s).
-5. **`.github/workflows/release.yml`** — no changes needed. It calls
+   `installer.py` functions, `test_routes.py`/`test_standalone.py` to match
+   your real routes, and `standalone_test.sh` to install/check your real
+   CLI(s).
+6. **`.github/workflows/release.yml`** — no changes needed. It calls
    `tekflox/aw-marketplace`'s shared `app-release.yml`, which runs
    `tests/validate_manifest.py` + `tests/test_*.py` on every push to
    `master` — a failing test stops the release before any version bump,
    tag, or marketplace catalog write happens.
-6. **`README.md`** — replace this file with your app's own (what it
+7. **`README.md`** — replace this file with your app's own (what it
    installs, how it's configured, what's been tested where).
 
 Finally, get your new app **listed** in the marketplace: your first push
@@ -79,14 +99,34 @@ by hand.
 - `template_app/plugin.py` — `HelloAppPlugin` entrypoint; `activate(ctx)`
   installs the CLI via the gated `ctx.commands` facade (capability
   `commands:install`) so it's journaled and the framework reverts it on
-  uninstall.
+  uninstall, and registers `routes.py`'s sub-app via `ctx.routes` (capability
+  `routes:register`).
 - `template_app/installer.py` — the same install logic as a plain
   subprocess-calling module (no framework `ctx` needed) — used by the tests
   below.
+- `template_app/routes.py` — `build_routes() -> FastAPI`, the mode-agnostic
+  backend sub-app (`GET /hello`, `WS /ws/echo`) shared by integrated mode
+  (`plugin.py`) and standalone mode (`__main__.py`) — ADR Decision 2/4/6.
+- `template_app/__main__.py` — standalone entrypoint (`python -m
+  template_app`): mounts `routes.py`'s sub-app at the same `/api/apps/hello`
+  prefix, serves `ui/dist/` statically, no `IdentityGuard`.
+- `ui/` — the frontend half, mode-agnostic (ADR Decision 3/4): `src/client.js`
+  is the framework-free core; `src/plugin.js` is the integrated-mode
+  `register(host)` entry (a `core.nav` slot component + a headless WS
+  client), built by Vite in **lib mode** with `react`/`react-dom` externalized
+  (`vite.config.js --mode plugin` → `dist/template.js`, referenced from
+  `aw-app.json`'s `contributes.frontend.bundle`); `src/standalone.js` +
+  `index.html` is the standalone page (`vite.config.js --mode standalone` →
+  `dist/index.html` + assets). `npm run build` in `ui/` runs both, into the
+  SAME `ui/dist/`.
 - `tests/validate_manifest.py` — validates `aw-app.json` against the schema
   + checks every `system_clis` installer path exists on disk.
 - `tests/test_installer.py` — unit tests (subprocess mocked, no real
   installs) — runs in CI on every push, gating the release.
+- `tests/test_routes.py` — `TestClient` coverage of `routes.py`'s sub-app
+  (GET `/hello`, WS `/ws/echo`) — runs in CI.
+- `tests/test_standalone.py` — boots `__main__.py`'s standalone app and hits
+  the mounted API (plus the static UI mount, once `ui/` is built) — runs in CI.
 - `tests/standalone_test.sh` — installs `hello` for real and checks
   resolution + output; run inside the aw-workspace container (not part of
   CI — needs the real target environment).
