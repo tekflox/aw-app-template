@@ -11,7 +11,7 @@ correct permissions ceiling, auto-merge).
 
 It's a real, working app — not just files. `hello` installs one trivial CLI
 that prints a configurable greeting, contributes a tiny backend sub-app
-(`GET /hello` + `WS /ws/echo`) and a `core.nav` frontend slot, and runs
+(`GET /hello` + `WS /ws/echo` inside the app mount) and a `core.nav` frontend slot, and runs
 standalone too (`python -m template_app`) — so cloning this template and
 pushing to `master` gives you a green CI run, a tagged release, and a
 marketplace catalog entry before you've changed a single line. See
@@ -105,7 +105,7 @@ by hand.
   subprocess-calling module (no framework `ctx` needed) — used by the tests
   below.
 - `template_app/routes.py` — `build_routes() -> FastAPI`, the mode-agnostic
-  backend sub-app (`GET /hello`, `WS /ws/echo`) shared by integrated mode
+  backend sub-app (`GET /hello`, `WS /ws/echo` inside the app mount) shared by integrated mode
   (`plugin.py`) and standalone mode (`__main__.py`) — ADR Decision 2/4/6.
 - `template_app/__main__.py` — standalone entrypoint (`python -m
   template_app`): mounts `routes.py`'s sub-app at the same `/api/apps/hello`
@@ -125,6 +125,18 @@ by hand.
   installs) — runs in CI on every push, gating the release.
 - `tests/test_routes.py` — `TestClient` coverage of `routes.py`'s sub-app
   (GET `/hello`, WS `/ws/echo`) — runs in CI.
+
+### WebSocket namespace rule
+
+Do not claim root `/ws/*` for app features. Root `/ws/*` is reserved for AW
+core/control-plane sockets. App-owned browser WebSockets must live in an app
+namespace:
+
+- current in-process mount shape: `/api/apps/<slug>/ws/<name>`
+- reserved edge namespace for app-owned sockets: `/ws/apps/<slug>/<name>`
+
+When adding a top-level WebSocket route or Caddy/edge mapping for an app, use
+`/ws/apps/<slug>/...`, never `/ws/...`.
 - `tests/test_standalone.py` — boots `__main__.py`'s standalone app and hits
   the mounted API (plus the static UI mount, once `ui/` is built) — runs in CI.
 - `tests/standalone_test.sh` — installs `hello` for real and checks

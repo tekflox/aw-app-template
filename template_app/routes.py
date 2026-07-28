@@ -17,10 +17,13 @@ code and docs use one path shape in both modes:
     integrated: /api/apps/hello/hello        /api/apps/hello/ws/echo
     standalone: /api/apps/hello/hello        /api/apps/hello/ws/echo
 
-Canonical WS path shape (Decision 2): ``/api/apps/<slug>/ws/<name>`` — this
-sub-app declares ``@app.websocket("/ws/<name>")``. Root ``/ws/*`` stays
-reserved for core (``/ws/terminal``, ``/ws/notifications``, ...) — never add
-a new root-level WS route for an app feature.
+Integrated in-process WS path shape (Decision 2):
+``/api/apps/<slug>/ws/<name>`` — this sub-app declares
+``@app.websocket("/ws/<name>")``. Browser-facing app-owned WebSockets that
+need a top-level edge namespace belong under ``/ws/apps/<slug>/...``. Root
+``/ws/*`` stays reserved for core/control-plane sockets
+(``/ws/terminal``, ``/ws/notifications``, ...) — never add a new root-level
+WS route for an app feature.
 
 ``local_paths`` escape (Decision 2): an app that needs an endpoint callable
 without a JWT from inside the workspace's own network namespace (e.g. an

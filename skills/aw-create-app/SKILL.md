@@ -163,7 +163,7 @@ def build_routes() -> FastAPI:
     async def hello():
         return {"message": "hi"}
 
-    @app.websocket("/ws/echo")           # canonical: /ws/<name>, never bare "/ws"
+    @app.websocket("/ws/echo")           # app-local WS; externally stays app-namespaced
     async def ws_echo(ws: WebSocket):
         await ws.accept()
         try:
@@ -182,8 +182,10 @@ then cookie for WS). **Apps never implement their own auth in integrated
 mode.** Full canonical path shapes:
 
 ```
-/api/apps/<id>/...          HTTP routes
-/api/apps/<id>/ws/<name>     WebSocket routes (root /ws/* stays core-only)
+/api/apps/<id>/...           HTTP routes
+/api/apps/<id>/ws/<name>     in-process app WebSocket routes
+/ws/apps/<id>/<name>         reserved edge namespace for app-owned WebSockets
+/ws/*                        core/control-plane only
 ```
 
 `local_paths` (agent-callable, no-JWT-from-localhost endpoints) is a
@@ -276,7 +278,8 @@ and WS request, serving your built bundle from `<pkg>/ui/dist/` at
 reads, and the single shared React/SDK instance every `component`-mode
 bundle resolves through `window.__AW_PLUGIN_HOST__`. **Never**: add a new
 root-level route or WS path for an app feature (`/ws/devctl` was the
-mistake this ADR undoes), implement your own auth on an integrated route,
+mistake this ADR undoes; use `/ws/apps/<id>/...` for top-level app-owned
+WS namespaces), implement your own auth on an integrated route,
 or bundle your own copy of React into a plugin bundle.
 
 ## 9. How it shows up + install

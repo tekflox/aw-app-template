@@ -6,6 +6,9 @@
 //
 //   apiUrl:    (sub) => string        e.g. sub="/hello"   -> ".../api/apps/hello/hello"
 //   wsUrl:     (sub) => string        e.g. sub="/ws/echo" -> "ws(s)://.../api/apps/hello/ws/echo"
+//
+// App-owned top-level WebSocket namespaces are reserved at /ws/apps/<slug>/...
+// so apps never claim root /ws/*; root /ws/* stays AW core/control-plane only.
 //   fetchImpl: (path, init) => Promise<Response>   defaults to plain fetch
 
 export function createClient({ apiUrl, wsUrl, fetchImpl = fetch }) {
