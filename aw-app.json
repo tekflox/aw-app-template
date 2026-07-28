@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "hello",
   "name": "Hello World (App Template)",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "TEMPLATE \u2014 a minimal, fully working decoupled app: installs one trivial CLI (`hello`, prints a configurable greeting) through the gated commands:install facade, with tests and CI/marketplace release already wired. Rename everything marked TEMPLATE/hello before this becomes a real app \u2014 see README.md.",
   "tier": "inprocess",
   "publisher": "TekFlox",
@@ -31,7 +31,7 @@
       {
         "id": "aw-create-app",
         "path": "skills/aw-create-app/SKILL.md",
-        "description": "How to author a decoupled aw-workspace app from this template — manifest, tiers, capabilities, contributes, window widgets, install + marketplace release."
+        "description": "How to author a decoupled aw-workspace app from this template \u2014 manifest, tiers, capabilities, contributes, window widgets, install + marketplace release."
       }
     ]
   },
