@@ -121,8 +121,7 @@ marketplace release). It's declared in the manifest:
 
 Convention for any app that wants to teach an agent how to use it: drop a
 `skills/<id>/SKILL.md` (YAML frontmatter with `name` + `description`) and list
-it under `contributes.skills`. **Runtime note (2026-07-28):** aw-workspace's
-`src/apps/` does not yet *consume* `contributes.skills` — installing the app
-does not auto-register the skill for agents yet. The declaration + file are
-the forward contract; wiring the runtime to surface app-contributed skills is
-tracked separately.
+it under `contributes.skills`. On install, aw-workspace's runtime symlinks the
+skill's own directory into a shared workspace skills index (no content
+duplication) and lists it at `GET /api/apps/-/skills`; uninstall removes the
+symlink. See `repos/aw-workspace/src/apps/skills.py`.
