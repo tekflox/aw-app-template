@@ -2,11 +2,15 @@
   "manifest_version": 1,
   "id": "hello",
   "name": "Hello World (App Template)",
-  "version": "0.1.0",
-  "description": "TEMPLATE — a minimal, fully working decoupled app: installs one trivial CLI (`hello`, prints a configurable greeting) through the gated commands:install facade, with tests and CI/marketplace release already wired. Rename everything marked TEMPLATE/hello before this becomes a real app — see README.md.",
+  "version": "0.2.0",
+  "description": "TEMPLATE \u2014 a minimal, fully working decoupled app: installs one trivial CLI (`hello`, prints a configurable greeting) through the gated commands:install facade, with tests and CI/marketplace release already wired. Rename everything marked TEMPLATE/hello before this becomes a real app \u2014 see README.md.",
   "tier": "inprocess",
   "publisher": "TekFlox",
-  "resource_estimate": { "cpu": "low", "memory": "low", "disk": "low" },
+  "resource_estimate": {
+    "cpu": "low",
+    "memory": "low",
+    "disk": "low"
+  },
   "runtime": {
     "python": ">=3.11",
     "entrypoint": "template_app.plugin:HelloAppPlugin",
@@ -18,7 +22,10 @@
   ],
   "contributes": {
     "system_clis": [
-      { "name": "hello", "installer": "scripts/install_hello.sh" }
+      {
+        "name": "hello",
+        "installer": "scripts/install_hello.sh"
+      }
     ]
   },
   "config_schema": {
