@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "hello",
   "name": "Hello World (App Template)",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "TEMPLATE \u2014 a minimal, fully working decoupled app: installs one trivial CLI (`hello`, prints a configurable greeting) through the gated commands:install facade, with tests and CI/marketplace release already wired. Rename everything marked TEMPLATE/hello before this becomes a real app \u2014 see README.md.",
   "tier": "inprocess",
   "publisher": "TekFlox",
