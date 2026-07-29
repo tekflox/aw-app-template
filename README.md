@@ -143,6 +143,24 @@ When adding a top-level WebSocket route or Caddy/edge mapping for an app, use
   resolution + output; run inside the aw-workspace container (not part of
   CI — needs the real target environment).
 
+### App window contract
+
+Window definitions live in `contributes.windows[]`, but shared window chrome
+lives in `aw-frontend`, not in each app. Full app surfaces should declare a
+managed window:
+
+```jsonc
+{
+  "id": "myapp.main",
+  "title": "My App",
+  "icon": "box",
+  "body": { "type": "managed_app", "kind": "web", "path": "/" }
+}
+```
+
+Use `body.type: "declarative"` only for focused settings/control panels that
+need the widget vocabulary. See `docs/window-contract.md`.
+
 ## CI/CD
 
 `tests/validate_manifest.py` and `tests/test_*.py` run in

@@ -307,8 +307,9 @@ or bundle your own copy of React into a plugin bundle.
 
 1. Copy this repo → `aw-app-<name>`; rename `template_app/`, `id`, `name`, entrypoint.
 2. Pick the tier; declare only the capabilities you use.
-3. Add your `contributes` (window for UI, routes for a backend, frontend
-   bundle, etc. — §4–§7).
+3. Add your `contributes` (managed window for a full UI, declarative window
+   for a small settings/control panel, routes for a backend, frontend bundle,
+   etc. — §4–§7 and `docs/window-contract.md`).
 4. `python tests/validate_manifest.py` green; `pytest tests/` green (routes
    TestClient + standalone boot smoke); `npm run build` in `ui/` if you have
    a frontend; `tests/standalone_test.sh` green.

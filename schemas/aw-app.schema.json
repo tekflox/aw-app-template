@@ -11,6 +11,7 @@
     "name": { "type": "string", "minLength": 1 },
     "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
     "description": { "type": "string" },
+    "icon": { "type": "string" },
     "tier": { "enum": ["inprocess", "container"] },
     "runtime": {
       "type": "object",
@@ -55,7 +56,51 @@
             }
           }
         },
-        "windows": { "type": "array" },
+        "windows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "body"],
+            "properties": {
+              "id": {
+                "type": "string",
+                "description": "Namespaced window id, e.g. browser.main. Runtime validators enforce the <app-id>. prefix."
+              },
+              "title": { "type": "string" },
+              "icon": { "type": "string" },
+              "body": {
+                "type": "object",
+                "required": ["type"],
+                "properties": {
+                  "type": {
+                    "enum": ["managed_app", "declarative", "component"],
+                    "description": "managed_app means the app declares intent only; aw-frontend owns chrome/layout. declarative renders a windows/*.json widget spec. component is reserved for trusted code-backed windows."
+                  },
+                  "kind": {
+                    "enum": ["browser", "web", "tool", "settings", "dashboard"],
+                    "description": "Frontend rendering hint for managed_app windows."
+                  },
+                  "path": {
+                    "type": "string",
+                    "description": "Optional path/query on the app subdomain for managed_app windows."
+                  },
+                  "app_id": {
+                    "type": "string",
+                    "description": "Optional target app id; defaults to the contributing app id."
+                  },
+                  "spec": {
+                    "type": "string",
+                    "description": "Path to a declarative windows/*.json spec, only for body.type=declarative."
+                  },
+                  "spec_data": {
+                    "type": "object",
+                    "description": "Runtime-inlined declarative spec returned by GET /api/apps/-/contributions."
+                  }
+                }
+              }
+            }
+          }
+        },
         "nav": { "type": "array" },
         "skills": {
           "type": "array",
