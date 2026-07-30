@@ -1,7 +1,7 @@
 # aw-app-template
 
-Starting point for a new [Decoupled Apps Framework](https://github.com/fredericowu/agentic-workspace/blob/main/docs/knowledge_base/docs/architecture/decoupled-apps-framework.md)
-app (`aw-app.json` manifest schema v1). Every `aw-app-*` app should be born
+Starting point for a new AW workspace app (`aw-app.json` manifest schema v1).
+Every `aw-app-*` app should be born
 from **the latest version of this template**, not copy-pasted from an
 existing app — this repo already carries the full, currently-correct
 skeleton: manifest, plugin, tests, and a CI/CD pipeline wired to the
@@ -176,7 +176,7 @@ first listing and not auto-synced afterward).
 ## Contributing a skill (`contributes.skills`)
 
 This app ships a **skill** — `skills/aw-create-app/SKILL.md` — that teaches an
-agent how to author a new decoupled app from this template (manifest, tiers,
+agent how to author a new workspace app from this template (manifest, tiers,
 the capability catalog, contributes, the window widget vocabulary, install +
 marketplace release). It's declared in the manifest:
 
@@ -184,7 +184,7 @@ marketplace release). It's declared in the manifest:
 "contributes": {
   "skills": [
     { "id": "aw-create-app", "path": "skills/aw-create-app/SKILL.md",
-      "description": "How to author a decoupled aw-workspace app." }
+      "description": "How to author an aw-workspace app." }
   ]
 }
 ```
