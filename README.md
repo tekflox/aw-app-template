@@ -159,7 +159,11 @@ managed window:
 ```
 
 Use `body.type: "declarative"` only for focused settings/control panels that
-need the widget vocabulary. See `docs/window-contract.md`.
+need the widget vocabulary. Managed windows and `tier: "container"` apps also
+receive framework-owned settings automatically: `auto_start`,
+`auth_required`, and `public`. `aw-frontend` renders those toggles, and
+`aw-workspace` persists and enforces them. App packages should not implement
+duplicate lifecycle/auth/public toggles. See `docs/window-contract.md`.
 
 ## CI/CD
 

@@ -38,6 +38,52 @@ Rules:
 - The app should not duplicate title-bar controls or window layout in its own
   spec for managed windows.
 
+### Framework Settings for Managed Apps
+
+Managed apps get workspace-owned lifecycle and access settings automatically.
+The app declares `body.type: "managed_app"` or `tier: "container"`; it does not
+declare or implement these toggles itself.
+
+`aw-workspace` merges these properties into the effective config schema exposed
+by `GET /api/apps` and `GET /api/apps/<app-id>/config`:
+
+```jsonc
+{
+  "auto_start": {
+    "type": "boolean",
+    "default": true,
+    "title": "Auto-start"
+  },
+  "auth_required": {
+    "type": "boolean",
+    "default": true,
+    "title": "Authentication required"
+  },
+  "public": {
+    "type": "boolean",
+    "default": false,
+    "title": "Public"
+  }
+}
+```
+
+- `auto_start`: when true, `aw-workspace` starts the managed process or
+  container during workspace startup/reconcile. When false, the app remains
+  installed and mounted, but the managed process is left stopped until the user
+  starts it.
+- `auth_required`: when true, `aw-workspace` requires a valid workspace identity
+  token before proxying app routes. When false, the mounted app route may be
+  opened without authentication.
+- `public`: defaults to false and declares whether the app should be exposed through the public
+  workspace routing layer. Apps should treat this as a framework routing
+  contract, not app code. The workspace/edge routing layer is responsible for
+  enforcing private versus public exposure.
+
+`aw-frontend` renders these as settings toggles in the app config UI and saves
+them through `POST /api/apps/<app-id>/config`. App-authored settings panels can
+still call their own app routes, but they should not replace these framework
+controls.
+
 ## Declarative Windows
 
 Use `body.type: "declarative"` when the app needs a small settings/control

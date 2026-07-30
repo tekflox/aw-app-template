@@ -74,7 +74,7 @@
                 "properties": {
                   "type": {
                     "enum": ["managed_app", "declarative", "component"],
-                    "description": "managed_app means the app declares intent only; aw-frontend owns chrome/layout. declarative renders a windows/*.json widget spec. component is reserved for trusted code-backed windows."
+                    "description": "managed_app means the app declares intent only; aw-frontend owns chrome/layout and framework settings, while aw-workspace owns lifecycle/access behavior. declarative renders a windows/*.json widget spec. component is reserved for trusted code-backed windows."
                   },
                   "kind": {
                     "enum": ["browser", "web", "tool", "settings", "dashboard"],
