@@ -70,6 +70,29 @@ Two tiers:
 
 Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.schema.json`).
 
+### Reacting to a settings save (`on_config_saved`)
+
+`POST /api/apps/<id>/config` updates `ctx.config` and, if your plugin
+defines it, awaits `plugin.on_config_saved(ctx)` right after — optional,
+duck-typed (no base class required), a no-op if you don't define it. Use it
+when a config change needs to do something beyond being read lazily next
+time — e.g. `aw-app-mcp-tools` regenerates its own root `mcp.json` on disk
+here from a per-tool enable/disable toggle, which is also why it sets
+`contributes.mcp.reload_on_save: true` (§4): that flag makes aw-workspace
+call the MCP Gateway's `POST /reload` right after your hook returns, so
+whatever file you just wrote takes effect immediately.
+
+```python
+class MyAppPlugin:
+    async def activate(self, ctx):
+        ...
+    async def on_config_saved(self, ctx):
+        # ctx.config already reflects the just-saved values here.
+        ...
+    async def deactivate(self):
+        ...
+```
+
 ## 3. Capability catalog (`permissions`)
 
 Only request what you use — each is enforced by the runtime's `AppContext`.
@@ -134,6 +157,26 @@ in this repo in sync if that catalog ever grows.
     "frontend": {
       "mode": "component",       // or "iframe" / "declarative" — see loadPlugin.js
       "bundle": "ui/dist/myapp.js"
+    }
+  }
+  ```
+- **`mcp`** — this app's MCP-related declarations. Two independent, optional
+  sibling keys on the same object:
+  ```jsonc
+  "contributes": {
+    "mcp": {
+      // Marketplace "What you get" detail-view list (Manifest.what_you_get) —
+      // purely informational, doesn't affect what actually gets exposed.
+      "provides": [{ "name": "my_tool" }, "another_tool"],
+      // True if this app ALSO ships its own root mcp.json — aw-mcp-gateway's
+      // app-scan reads that file directly (see aw-app-mcp-tools for the
+      // reference implementation: a Playwright + echo MCP tool bundle with
+      // per-tool enable/disable toggles). Setting this tells aw-workspace's
+      // POST /api/apps/<id>/config to call the installed mcp-gateway app's
+      // POST /reload right after your on_config_saved hook returns (see
+      // below) — so a settings change that affects your mcp.json takes
+      // effect immediately, no gateway restart.
+      "reload_on_save": true
     }
   }
   ```

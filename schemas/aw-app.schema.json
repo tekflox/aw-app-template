@@ -119,7 +119,15 @@
         "services": { "type": "array" },
         "containers": { "type": "array" },
         "extension_points": { "type": "array" },
-        "extensions": { "type": "array" }
+        "extensions": { "type": "array" },
+        "mcp": {
+          "type": "object",
+          "description": "MCP-related declarations. `provides` is the marketplace What-you-get tool list (informational only). `reload_on_save: true` means this app ships its own root mcp.json (scanned directly by aw-mcp-gateway's app-scan) — a config save then calls the installed mcp-gateway app's POST /reload after your plugin's on_config_saved hook runs. See skills/aw-create-app/SKILL.md §4/§2.",
+          "properties": {
+            "provides": { "type": "array" },
+            "reload_on_save": { "type": "boolean" }
+          }
+        }
       }
     },
     "config_schema": {
