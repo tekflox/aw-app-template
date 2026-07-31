@@ -325,7 +325,53 @@ mistake this ADR undoes; use `/ws/apps/<id>/...` for top-level app-owned
 WS namespaces), implement your own auth on an integrated route,
 or bundle your own copy of React into a plugin bundle.
 
-## 9. How it shows up + install
+## 9. Depending on another app (`dependencies.apps`)
+
+If your app needs another app's routes/tools to already be loaded — e.g. an
+app that contributes an `mcp.json` needs the **MCP Gateway** app running so
+its tools get picked up — declare it in the manifest's `dependencies.apps`
+list:
+
+```jsonc
+"dependencies": {
+  "apps": [
+    {
+      "id": "mcp-gateway",              // the dependency's app id/slug
+      "version": ">=0.1.0",             // optional semver constraint (informational)
+      "required": true,                 // default true; set false/omit for an optional dep
+      "reason": "Contributes mcp.json definitions the gateway discovers and merges."
+    }
+  ]
+}
+```
+
+Enforced by `AppReconciler._install_dependencies` (aw-workspace
+`src/apps/reconciler.py`) — **not** a `depends_on` key; the field is
+`dependencies.apps`, kept as a loose/forward-compatible object so unrelated
+metadata can live alongside it. Behavior:
+
+- `POST /api/apps/install` (and `aw-workspace marketplace install <id>` in
+  the CLI, `bin/aw-workspace`) resolves every `required` entry in
+  `dependencies.apps` **before** installing your app — pulling each
+  dependency from the local mirror, the marketplace catalog, or an explicit
+  `repo`/`package_dir` on the dependency entry, in that order. Already-loaded
+  dependencies are skipped.
+- A short string entry (`"apps": ["mcp-gateway"]`) is equivalent to
+  `{"id": "mcp-gateway"}` — required by default.
+- Set `"required": false` or `"optional": true` on an entry to make it a soft
+  dependency (documented, but not auto-installed or blocking).
+- Cyclic dependency chains raise instead of hanging (`cyclic app dependency
+  chain: a -> b -> a`).
+- The reconciler's removal pass also protects a loaded required dependency
+  from being uninstalled just because only the *dependent* app was named in
+  the desired set (`_loaded_dependency_closure`) — so installing `mcp-tools`
+  keeps `mcp-gateway` around even if only `mcp-tools` is in the cloud
+  registry's desired-apps row.
+
+Real example: `aw-app-mcp-tools/aw-app.json` declares `mcp-gateway` as a
+required dependency for exactly this reason — see that repo's manifest.
+
+## 10. How it shows up + install
 
 - Installed apps live in `~/agentic-workspace/apps/<id>/`; the runtime loads
   their manifests and serves `GET /api/apps` (list) + `GET /api/apps/-/contributions`
@@ -337,7 +383,7 @@ or bundle your own copy of React into a plugin bundle.
   (public, tokenless raw-GET). Ship `.github/workflows/release.yml` (see this
   repo) to cut versioned releases; the catalog references the repo.
 
-## 10. Reference apps (read these before building)
+## 11. Reference apps (read these before building)
 
 - `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `hello`
   CLI) + `routes:register`/`ui:code` (a `/hello` + `/ws/echo` sub-app, a
@@ -346,7 +392,7 @@ or bundle your own copy of React into a plugin bundle.
 - `aw-app-devctl` — Tier-1 + `routes:register` (talks CDP to another app's container).
 - `aw-app-browser` — Tier-2 container + `app_iframe` window → external subdomain (noVNC).
 
-## 11. Checklist
+## 12. Checklist
 
 1. Copy this repo → `aw-app-<name>`; rename `template_app/`, `id`, `name`, entrypoint.
 2. Pick the tier; declare only the capabilities you use.
