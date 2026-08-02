@@ -125,6 +125,42 @@ by hand.
   installs) — runs in CI on every push, gating the release.
 - `tests/test_routes.py` — `TestClient` coverage of `routes.py`'s sub-app
   (GET `/hello`, WS `/ws/echo`) — runs in CI.
+- `external-client/app-api-client.js` — generic, dependency-free helper for
+  calling your app's API from an external client (browser extension, mobile
+  app); see "Calling your app's API from an external client" below.
+
+### Calling your app's API from an external client (browser extension, mobile app, etc.)
+
+Every app installed on an AW workspace is reachable via **two** hostname
+shapes, both hitting the exact same backend route/view/auth
+(`aw-workspace`'s `src/apps/runtime.py`, `_attach_mount`, registers a
+`Mount(f"/api/apps/{app_id}")` **and** a `Host(f"{app_id}.app.{...}")` for
+the same guarded ASGI sub-app — generic platform behavior, true for every
+installed app, not something you opt into):
+
+1. **Workspace-wide API host** — path-prefixed with your app's slug:
+   `https://api.<workspace-slug>.workspace.aw.tekflox.com/api/apps/<app-slug>/<route>`
+2. **Per-app subdomain** — bare path, Host-header-routed straight to your
+   app's sub-application with no prefix stripped:
+   `https://<app-slug>.app.<workspace-slug>.workspace.aw.tekflox.com/<route>`
+
+**Same-origin code in `ui/` never needs to worry about this** — a request
+made from a page already loaded on one of those hosts resolves relative
+paths against that host automatically. This only matters for a true
+**external** caller (browser extension popup, native mobile app, userscript,
+CLI) that has a user-configured hostname and builds an absolute URL from it
+by hand. If that code hardcodes one shape, it 404s the moment the user
+points it at the other host — there's no `/api/apps/<slug>/...` route on the
+subdomain-routed mount (only bare paths), and no bare route on the
+workspace-wide API host (only prefixed ones).
+
+`external-client/app-api-client.js` is a small, dependency-free, no-build-step
+JS helper any external client can copy in to handle this correctly —
+`buildAppApiUrl(configuredHost, appSlug, routePath)` detects which shape the
+configured host is and returns the right URL either way. See that
+directory's `README.md` for usage, and its header comment for the full
+rationale (including the real incident it generalizes, in `aw-app-proxy`'s
+browser extensions).
 
 ### WebSocket namespace rule
 
