@@ -180,6 +180,25 @@ in this repo in sync if that catalog ever grows.
     }
   }
   ```
+- **`skills`** — teach an agent how to use/build with this app. Each entry:
+  `{ "id": "my-skill", "path": "skills/my-skill/SKILL.md", "description": "..." }`
+  — no extra permission needed, every app gets this for free. On install, the
+  runtime symlinks the **whole directory** the `SKILL.md` lives in (so any
+  reference assets next to it come along too) into the shared skills index at
+  `<AW_WORKSPACE_HOME>/skills/<app_id>__<skill_id>/` (`src/apps/skills.py`) —
+  no content is copied, so editing `skills/<id>/SKILL.md` after install shows
+  up immediately through the symlink. Reverted (symlink removed) on
+  uninstall. `GET /api/apps/-/skills` lists every installed app's registered
+  skills (pointer only, for an agent runtime to read). This file is a live
+  example of the pattern — see this repo's own `aw-app.json` `contributes.skills`.
+  ```jsonc
+  "contributes": {
+    "skills": [
+      { "id": "my-skill", "path": "skills/my-skill/SKILL.md",
+        "description": "One line — when an agent should reach for this." }
+    ]
+  }
+  ```
 
 ### Window widget vocabulary (`windows/*.json`)
 
@@ -375,13 +394,37 @@ required dependency for exactly this reason — see that repo's manifest.
 
 - Installed apps live in `~/agentic-workspace/apps/<id>/`; the runtime loads
   their manifests and serves `GET /api/apps` (list) + `GET /api/apps/-/contributions`
-  (live-refetched nav/windows) + `GET /api/apps/-/catalog` (marketplace).
+  (live-refetched nav/windows) + `GET /api/apps/-/catalog` (marketplace) +
+  `GET /api/apps/-/skills` (every installed app's `contributes.skills`, §4).
 - The SPA "Apps" launcher lists them as cards; clicking opens the default window.
 - Install paths: `POST /api/apps/install` (fetch repo + reconcile), the
   reconciler's "Install My Apps", or a hand-sync of the app dir + workspace reload.
 - **Marketplace:** the app must be listed in the marketplace catalog source
   (public, tokenless raw-GET). Ship `.github/workflows/release.yml` (see this
   repo) to cut versioned releases; the catalog references the repo.
+
+### First push after `gh repo create tekflox/aw-app-<name> --private --source=. --push`
+
+The release CI will fail on the very first push with `Secret
+MARKETPLACE_SYNC_TOKEN is required, but not provided` — that org secret has a
+per-repo allowlist (`visibility: selected`) and a brand-new repo isn't on it
+yet. Fix it immediately (don't make the user click through the GitHub
+org-admin UI) using `GH_RUNNERS_ADMIN_TOKEN` (root `.env`, `admin:org` scope):
+
+```bash
+GH_ADMIN_TOKEN=$(grep ^GH_RUNNERS_ADMIN_TOKEN= /opt/agentic-workspace/.env | cut -d= -f2)
+REPO_ID=$(curl -s -H "Authorization: token $GH_ADMIN_TOKEN" \
+  https://api.github.com/repos/tekflox/aw-app-<name> | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
+curl -s -o /dev/null -w "http_code=%{http_code}\n" -X PUT \
+  -H "Authorization: token $GH_ADMIN_TOKEN" \
+  "https://api.github.com/orgs/tekflox/actions/secrets/MARKETPLACE_SYNC_TOKEN/repositories/$REPO_ID"
+```
+
+204 = added. Then `gh workflow run release.yml --repo tekflox/aw-app-<name>`
+to confirm CI actually goes green before telling the user it's done — org
+secrets are write-only (never readable back via the API), so this allowlist
+PUT is the only automatable step; nothing else about `MARKETPLACE_SYNC_TOKEN`
+needs touching.
 
 ## 11. Reference apps (read these before building)
 
