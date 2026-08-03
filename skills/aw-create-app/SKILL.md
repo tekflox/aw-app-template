@@ -183,14 +183,18 @@ in this repo in sync if that catalog ever grows.
 - **`skills`** — teach an agent how to use/build with this app. Each entry:
   `{ "id": "my-skill", "path": "skills/my-skill/SKILL.md", "description": "..." }`
   — no extra permission needed, every app gets this for free. On install, the
-  runtime symlinks the **whole directory** the `SKILL.md` lives in (so any
-  reference assets next to it come along too) into the shared skills index at
-  `<AW_WORKSPACE_HOME>/skills/<app_id>__<skill_id>/` (`src/apps/skills.py`) —
-  no content is copied, so editing `skills/<id>/SKILL.md` after install shows
-  up immediately through the symlink. Reverted (symlink removed) on
+  runtime **copies** (never symlinks) the **whole directory** the `SKILL.md`
+  lives in (so any reference assets next to it come along too) into the
+  shared skills index at `<AW_WORKSPACE_HOME>/skills/<app_id>__<skill_id>/`
+  (`src/apps/skills.py`) — an installed app's own package dir is immutable
+  (overwritten wholesale on update), so the workspace's copy is what the user
+  is meant to edit in place; re-registering (every boot re-activates every
+  installed app) never overwrites a copy that already exists. Removed on
   uninstall. `GET /api/apps/-/skills` lists every installed app's registered
   skills (pointer only, for an agent runtime to read). This file is a live
   example of the pattern — see this repo's own `aw-app.json` `contributes.skills`.
+  (Known gap: `<AW_WORKSPACE_HOME>/skills` isn't committed/backed up anywhere
+  today, so an edit doesn't survive a full workspace recreation — unsolved.)
   ```jsonc
   "contributes": {
     "skills": [
