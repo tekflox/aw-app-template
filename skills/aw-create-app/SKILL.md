@@ -25,8 +25,9 @@ fully-wired "hello" example). Copy it, rename everything marked `TEMPLATE`/
 ## 1. What an app is
 
 A decoupled app is a self-contained repo (`aw-app-<name>`) with a manifest
-(`aw-app.json`) at its root. The aw-workspace runtime loads installed apps
-from `~/aw-workspace/apps/<id>/` and serves them under `/api/apps/<id>`.
+(`aw-app.json`) at its root. The aw-workspace runtime fetches installed apps
+into `/opt/aw-workspace/apps/<slug>/` (`AW_APPS_ROOT`, see `src/apps/fetch.py`)
+and serves them under `/api/apps/<id>`.
 Two tiers:
 
 - **Tier-1 (`"tier": "inprocess"`)** — a Python plugin loaded into the
@@ -429,9 +430,10 @@ required dependency for exactly this reason — see that repo's manifest.
 
 ## 10. How it shows up + install
 
-- Installed apps live in `~/aw-workspace/apps/<id>/`; the runtime loads
-  their manifests and serves `GET /api/apps` (list) + `GET /api/apps/-/contributions`
-  (live-refetched nav/windows) + `GET /api/apps/-/catalog` (marketplace) +
+- Installed apps live in `/opt/aw-workspace/apps/<slug>/` (`AW_APPS_ROOT`);
+  the runtime loads their manifests and serves `GET /api/apps` (list) +
+  `GET /api/apps/-/contributions` (live-refetched nav/windows) +
+  `GET /api/apps/-/catalog` (marketplace) +
   `GET /api/apps/-/skills` (every installed app's `contributes.skills`, §4).
 - The SPA "Apps" launcher lists them as cards; clicking opens the default window.
 - Install paths: `POST /api/apps/install` (fetch repo + reconcile), the
@@ -449,7 +451,7 @@ yet. Fix it immediately (don't make the user click through the GitHub
 org-admin UI) using `GH_RUNNERS_ADMIN_TOKEN` (root `.env`, `admin:org` scope):
 
 ```bash
-GH_ADMIN_TOKEN=$(grep ^GH_RUNNERS_ADMIN_TOKEN= /opt/agentic-workspace/.env | cut -d= -f2)
+GH_ADMIN_TOKEN=$(grep ^GH_RUNNERS_ADMIN_TOKEN= /opt/aw-workspace/.env | cut -d= -f2)
 REPO_ID=$(curl -s -H "Authorization: token $GH_ADMIN_TOKEN" \
   https://api.github.com/repos/tekflox/aw-app-<name> | python3 -c "import json,sys; print(json.load(sys.stdin)['id'])")
 curl -s -o /dev/null -w "http_code=%{http_code}\n" -X PUT \
