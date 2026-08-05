@@ -67,10 +67,8 @@ Two tiers:
 }
 ```
 
-`config_schema` is **optional** — omit it entirely if your app has no
-configurable settings (most Runnables-style apps don't; that's why this
-template ships without one). Only add it when there's a real knob to
-expose:
+`config_schema` is **optional** — omit it entirely if your app has no config
+at all. Add it when there's a real knob to expose:
 
 ```jsonc
 "config_schema": {
@@ -79,11 +77,20 @@ expose:
     "some_field": { "type": "string", "default": "x", "description": "..." }
   },
   "required": []
-}
+},
+"config_visible": false   // optional, defaults true — see below
 ```
 
-Its presence is what turns on `has_config: true` (and the Settings gear /
-config form) for your app — see aw-app-git for a real example.
+Its presence is normally what turns on `has_config: true` (and the Settings
+gear / config form) for your app. But not every app has *user-facing*
+settings worth putting in front of a human (most Runnables-style apps
+don't) — set the sibling field **`config_visible: false`** to keep a real
+`config_schema` (still readable via `ctx.config`, still editable through
+`POST /api/apps/<id>/config` directly) WITHOUT surfacing the gear/Settings
+entry for it. This template ships exactly that: a real `greeting` config
+knob, hidden by `config_visible: false`. Flip it to `true` (or delete the
+field, since that's the default) once your app has settings worth exposing
+in the UI — see aw-app-git for a real example with the gear on.
 
 Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.schema.json`).
 

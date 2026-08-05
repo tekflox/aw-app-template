@@ -19,11 +19,15 @@ it as-is (just rename the class/module) unless your app needs something
 service or a frontend nav entry — see aw-app-presentations, aw-app-
 whiteboard for those patterns instead).
 
-Not every app needs a `config_schema` / Settings gear — this template ships
-without one on purpose (most Runnables-style apps don't have any config
-knobs). If your app DOES need one, add `config_schema` back to aw-app.json
-and read it here via `ctx.config` — see aw-app-git's manifest + plugin.py
-for a real example (it also has a settings panel window).
+This template ships a real `config_schema` (the `greeting` knob) but
+`config_visible: false` in aw-app.json keeps it OFF the Settings gear/entry —
+not every app has user-facing settings (most Runnables-style apps don't),
+but a manifest can still keep a `config_schema` purely for internal use
+(read here via `ctx.config`, editable only through `POST /api/apps/<id>/config`
+directly, not the UI). Delete `config_schema`/`config_visible` entirely if
+you don't need config at all; flip `config_visible` to true (or remove it —
+it defaults true) if you want it user-facing — see aw-app-git's manifest +
+plugin.py for a real example with a settings panel window.
 """
 
 from __future__ import annotations
@@ -42,6 +46,9 @@ class HelloAppPlugin:
         with open(os.path.join(ctx.package_dir, "aw-app.json"), encoding="utf-8") as f:
             manifest = json.load(f)
 
+        greeting = (getattr(ctx, "config", {}) or {}).get("greeting") or "Hello"
+        os.environ["AW_APP_HELLO_GREETING"] = str(greeting)
+
         clis = manifest.get("contributes", {}).get("system_clis", [])
         installed = []
         for cli in clis:
@@ -52,7 +59,10 @@ class HelloAppPlugin:
 
         ctx.routes.register(routes_mod.build_routes())
 
-        log.info("aw-app-template activated: installed %s, routes mounted", installed)
+        log.info(
+            "aw-app-template activated: installed %s (greeting=%s), routes mounted",
+            installed, greeting,
+        )
 
     async def deactivate(self) -> None:
         # Revert is driven by the framework's journal reverse-replay (it runs

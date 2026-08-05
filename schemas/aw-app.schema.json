@@ -137,6 +137,10 @@
         "properties": { "type": "object" }
       }
     },
+    "config_visible": {
+      "type": "boolean",
+      "description": "Defaults to true. Set false to keep a real config_schema (read via ctx.config, e.g. for internal-only settings) WITHOUT showing the Settings gear/entry for it — not every app has user-facing settings."
+    },
     "dependencies": { "type": "object" },
     "migrations": { "type": "object" }
   }

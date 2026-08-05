@@ -52,6 +52,18 @@
       }
     ]
   },
+  "config_schema": {
+    "type": "object",
+    "properties": {
+      "greeting": {
+        "type": "string",
+        "default": "Hello",
+        "description": "Word the installed `hello` command prints before the target name, e.g. \"Hello, world!\"."
+      }
+    },
+    "required": []
+  },
+  "config_visible": false,
   "dependencies": {},
   "migrations": {}
 }
