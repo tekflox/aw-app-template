@@ -10,7 +10,7 @@ fix that's landed on that pipeline so far (test-gating before release,
 correct permissions ceiling, auto-merge).
 
 It's a real, working app — not just files. `hello` installs one trivial CLI
-that prints a configurable greeting, contributes a tiny backend sub-app
+that prints a greeting, contributes a tiny backend sub-app
 (`GET /hello` + `WS /ws/echo` inside the app mount) and a `core.nav` frontend slot, and runs
 standalone too (`python -m template_app`) — so cloning this template and
 pushing to `master` gives you a green CI run, a tagged release, and a
@@ -33,8 +33,11 @@ Then rename everything marked **TEMPLATE** in comments and every `hello`/
 `template_app` occurrence:
 
 1. **`aw-app.json`** — `id`, `name`, `description`, `runtime.entrypoint`,
-   `contributes.system_clis`, `config_schema` (or remove it if your app has
-   no config knobs — see `aw-app-brew`'s manifest for a config-free example).
+   `contributes.system_clis`. This template ships with **no `config_schema`**
+   on purpose — not every app needs a Settings gear (a Runnables-style app
+   with nothing to configure, for instance). Only add `config_schema` if
+   your app has real settings to expose — see `aw-app-git`'s manifest for a
+   config-schema example.
 2. **`template_app/`** — rename the directory + the class in `plugin.py`
    (and update `runtime.entrypoint` in `aw-app.json` to match). Keep,
    change, or delete each piece independently — they're not all-or-nothing:

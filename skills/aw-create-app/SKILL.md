@@ -62,11 +62,28 @@ Two tiers:
 
   "permissions": [ "routes:register" ],  // capability grants — see §3
   "contributes": { /* see §4 */ },
-  "config_schema": { "type": "object", "properties": {}, "required": [] },
   "dependencies": {},
   "migrations": {}
 }
 ```
+
+`config_schema` is **optional** — omit it entirely if your app has no
+configurable settings (most Runnables-style apps don't; that's why this
+template ships without one). Only add it when there's a real knob to
+expose:
+
+```jsonc
+"config_schema": {
+  "type": "object",
+  "properties": {
+    "some_field": { "type": "string", "default": "x", "description": "..." }
+  },
+  "required": []
+}
+```
+
+Its presence is what turns on `has_config: true` (and the Settings gear /
+config form) for your app — see aw-app-git for a real example.
 
 Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.schema.json`).
 
