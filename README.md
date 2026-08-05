@@ -207,6 +207,16 @@ receive framework-owned settings automatically: `auto_start`,
 `aw-workspace` persists and enforces them. App packages should not implement
 duplicate lifecycle/auth/public toggles. See `docs/window-contract.md`.
 
+## Calling the Workspace API From Your App or an MCP
+
+Every workspace has a shared API key (Settings → Integrations → Workspace
+API Key) that lets an app or a standalone MCP server authenticate into that
+workspace's HTTP API with an `X-Api-Key` header instead of a browser
+session — no per-app config field needed. See
+`docs/app-workspace-api-auth.md` for the full pattern (in-process vs
+external-process reads) and a worked example
+(`tekflox/aw-app-whiteboard`'s `mcp_server/`).
+
 ## CI/CD
 
 `tests/validate_manifest.py` and `tests/test_*.py` run in

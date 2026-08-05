@@ -94,6 +94,15 @@ in the UI — see aw-app-git for a real example with the gear on.
 
 Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.schema.json`).
 
+### Calling another route on this workspace (or from an external MCP)
+
+If your app needs to call a workspace API route from an outbound request
+(in-process `httpx` call, or a standalone MCP server that talks to this
+workspace over HTTP), authenticate with the workspace's shared API key
+instead of building your own auth — see `docs/app-workspace-api-auth.md`
+for the full pattern and a worked example
+(`tekflox/aw-app-whiteboard`'s `mcp_server/`).
+
 ### Reacting to a settings save (`on_config_saved`)
 
 `POST /api/apps/<id>/config` updates `ctx.config` and, if your plugin
