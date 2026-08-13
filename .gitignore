@@ -43,9 +43,7 @@ pnpm-debug.log*
 .yarn/build-state.yml
 .vite/
 ui/.vite/
-dist/
 build/
-ui/dist/
 ui/build/
 
 # Test and browser automation output
@@ -59,3 +57,8 @@ ui/coverage/
 tmp/
 temp/
 *.log
+
+# ui/dist IS committed: the release workflow runs tests only, never
+# `npm run build`, so a gitignored bundle means the installed app points at a
+# file that does not exist and its whole frontend silently vanishes.
+!ui/dist/

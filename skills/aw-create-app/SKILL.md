@@ -181,8 +181,9 @@ in this repo in sync if that catalog ever grows.
     ]
   }
   ```
-- **`system_clis`** — `[{ "name": "hello", "installer": "scripts/install_hello.sh" }]`
-  (needs `commands:install`).
+- **`system_clis`** — `[{ "name": "hello", "installer": "scripts/install_hello.sh",
+  "verify": "hello --version" }]` (needs `commands:install`).
+  See §6b — **installers have a contract, and getting it wrong fails silently.**
 - **`db`** — app-owned tables (needs `db:own-tables`).
 - **`frontend`** — a JS bundle mounted into granted slots (needs `ui:code`;
   unsigned apps are downgraded to iframe mode). See §6 for the source layout:
@@ -333,6 +334,68 @@ hand-build a raw `fetch()`/`new WebSocket()` URL yourself).
 Only `component` mode (needs `ui:code`, **signed/marketplace-only**) runs
 `register(host)` at all — an unsigned/side-loaded install is silently
 downgraded to `iframe` mode (`loadPlugin.js`'s `effectiveMode()`).
+
+## 6b. The installer contract (`system_clis`)
+
+Read this before writing `scripts/install_*.sh`. Every rule here comes from a
+bug that shipped and then stayed invisible for months, because a failing
+installer is retried on a timer and only ever logged.
+
+**1. Run privileged steps under `sudo`.** The container's default user is
+`ubuntu` (uid 1001) with `NOPASSWD: ALL` baked into the image. A bare
+`apt-get` dies with `Could not open lock file /var/lib/apt/lists/lock -
+open (13: Permission denied)`, on every boot, forever. Note that
+`sudo cmd > /root/file` still opens the file as the *calling* user — pipe
+through `sudo tee` instead.
+
+**2. Verify, don't detect.** An early-exit guard like
+
+```bash
+command -v git >/dev/null 2>&1 && exit 0   # WRONG
+```
+
+asks "is there a binary with this name", which is not what you need to know.
+A `git` shipped without its remote helpers prints a version quite happily and
+fails every `https://` fetch; that guard saw it, exited 0 on every reconcile
+pass, and the repair never ran. Check the capability you actually depend on,
+and pass `--reinstall` (or equivalent) so a half-present install is repaired
+rather than reported as "already the newest version" and skipped.
+
+**3. Declare `verify` in the manifest.** This is the framework's own health
+check — what makes `missing_system_clis` (and `aw-workspace-cli doctor`) able
+to see a CLI that is present but broken:
+
+```jsonc
+{ "name": "git", "installer": "scripts/install_git.sh",
+  "verify": "test -x \"$(git --exec-path)/git-remote-https\"" }
+```
+
+Defaults to `<name> --version`, which is right for most CLIs. Use an explicit
+command when that would lie (as for `git`) or when the CLI has no version flag
+(`ping`, `nc`, `go`, `gofmt`). An explicit `verify` is the SOLE authority — no
+PATH check runs first — which is how `nvm`, a shell function that is never on
+PATH, can be verified at all. Use `verify: false` only for a CLI with no
+meaningful check, so the weakening is explicit in your manifest rather than
+the silent default. Then thread it through:
+
+```python
+ctx.commands.install_system_cli(
+    cli["name"], cli["installer"], uninstall="scripts/uninstall.sh",
+    verify=cli.get("verify"))
+```
+
+**4. Don't assume anything beyond the base image.** It ships `curl`, `git`,
+`sudo`, `unzip`, `build-essential` and Python. `unzip` arrived late — apps
+that needed it were aborting with "unsupported base image" — so prefer
+`python3 -m zipfile -e` (stdlib, always there) and keep `unzip` as the
+preferred-when-present path. Note `python3 -m zipfile` drops mode bits, so
+`chmod +x` what you extract.
+
+**5. Check your work on a real workspace**, not just in tests:
+
+```bash
+aw-workspace-cli doctor          # anything silently degraded?
+```
 
 ## 7. Standalone mode
 
