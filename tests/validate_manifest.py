@@ -32,6 +32,14 @@ import jsonschema
 
 ROOT = Path(__file__).resolve().parent.parent
 
+# The manifest under test. Defaults to this repo's own; an explicit path lets
+# the same checks run against a fragment that isn't the app root — that's how
+# `examples/` stays honest instead of drifting into documentation nobody
+# executes. Referenced files are resolved relative to the MANIFEST's dir, the
+# schema always from this repo.
+MANIFEST_PATH = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / "aw-app.json"
+APP_ROOT = MANIFEST_PATH.parent
+
 # The widget types aw-workspace-ui's declarative renderer actually implements
 # (src/components/AppWindow.jsx). Keep in sync with that file; anything else
 # in a spec is dead weight that renders nothing.
@@ -63,7 +71,7 @@ def warn(msg: str) -> None:
     warnings.append(msg)
 
 
-manifest = json.loads((ROOT / "aw-app.json").read_text())
+manifest = json.loads(MANIFEST_PATH.read_text())
 schema = json.loads((ROOT / "schemas" / "aw-app.schema.json").read_text())
 jsonschema.validate(instance=manifest, schema=schema)
 
@@ -72,12 +80,12 @@ contributes = manifest.get("contributes", {}) or {}
 # ── 1. referenced files must exist ──────────────────────────────────────────
 
 for cli in contributes.get("system_clis", []) or []:
-    if not (ROOT / cli["installer"]).is_file():
+    if not (APP_ROOT / cli["installer"]).is_file():
         fail(f"installer script missing: {cli['installer']}")
 
 frontend = contributes.get("frontend") or {}
 bundle = frontend.get("bundle")
-if bundle and not (ROOT / bundle).is_file():
+if bundle and not (APP_ROOT / bundle).is_file():
     # The built bundle is COMMITTED in every shipping app (aw-app-whiteboard,
     # aw-app-remote-screen, ...) because the release workflow runs tests only
     # — it never runs `npm run build`. A gitignored dist therefore means the
@@ -88,12 +96,24 @@ if bundle and not (ROOT / bundle).is_file():
          f".gitignore does not exclude it)")
 
 for skill in contributes.get("skills", []) or []:
-    if not (ROOT / skill["path"]).is_file():
+    if not (APP_ROOT / skill["path"]).is_file():
         fail(f"skill file missing: {skill['path']}")
+
+# contributes.agents may point a system prompt / group instructions at a file
+# in the package. A missing one is the quietest failure of the lot: the
+# workspace drops that single field with a log line and seeds the agent
+# anyway, so you get a live agent with an EMPTY prompt.
+for _kind, _field in (("agents", "system_prompt_file"), ("groups", "instructions_file")):
+    for entry in ((contributes.get("agents") or {}).get(_kind) or []):
+        ref = entry.get(_field)
+        if ref and not (APP_ROOT / ref).is_file():
+            fail(f"contributes.agents.{_kind}[{entry.get('slug')!r}]: {_field} "
+                 f"{ref!r} does not exist — the object is still created, with "
+                 f"that field empty.")
 
 migrations = manifest.get("migrations") or {}
 if migrations:
-    mig_dir = ROOT / (migrations.get("dir") or "migrations")
+    mig_dir = APP_ROOT / (migrations.get("dir") or "migrations")
     if not mig_dir.is_dir():
         fail(f"migrations.dir declared but missing: {mig_dir.name}/")
 
@@ -141,7 +161,7 @@ for win in windows:
     if body.get("type") != "declarative":
         continue
     declarative_window_ids.add(win["id"])
-    spec_path = ROOT / body["spec"]
+    spec_path = APP_ROOT / body["spec"]
     if not spec_path.is_file():
         fail(f"window spec missing: {body['spec']}")
         continue

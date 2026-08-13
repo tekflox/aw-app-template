@@ -210,6 +210,28 @@ receive framework-owned settings automatically: `auto_start`,
 `aw-workspace` persists and enforces them. App packages should not implement
 duplicate lifecycle/auth/public toggles. See `docs/window-contract.md`.
 
+## Seeding Tasks and Agents on Install
+
+Two contribution surfaces don't mount something your app owns — they **seed**
+an object into a store the user also edits by hand:
+
+| Surface | Ships | Doc | Example |
+|---|---|---|---|
+| `contributes.tasks` | scheduled work your features depend on | [`docs/contributing-tasks.md`](docs/contributing-tasks.md) | [`examples/contributes-tasks/`](examples/contributes-tasks/) |
+| `contributes.agents` | Agents Platform models, configs, groups and agents | [`docs/contributing-agents.md`](docs/contributing-agents.md) | [`examples/contributes-agents/`](examples/contributes-agents/) |
+
+Both are **create-if-absent, never updated, never removed on uninstall** —
+so a corrected command or prompt in your *next* version does **not** reach an
+installation that already seeded. Read the doc before shipping one; that rule
+is the part that surprises people on their second release.
+
+Each example is a complete manifest, not a snippet, so you can run the real
+validator against it before merging the relevant part into yours:
+
+```bash
+python tests/validate_manifest.py examples/contributes-agents/aw-app.json
+```
+
 ## Calling the Workspace API From Your App or an MCP
 
 Every workspace has a shared API key (Settings → Integrations → Workspace

@@ -145,6 +145,8 @@ in this repo in sync if that catalog ever grows.
 | `fs:workspace-data` | low | read/write the app's own data dir |
 | `secrets:own` | low | request the app's own secrets |
 | `notifications:send` | low | fire a workspace notification |
+| `tasks:contribute` | low | seed scheduled tasks on install (created once, never updated) |
+| `agents:contribute` | low | seed Agents Platform models/configs/groups/agents on install (created once, never updated) |
 | `containers:manage` | **high** | run/manage sidecar containers (Tier-2) |
 | `ui:code` | **high** | load the app's JS bundle into the SPA |
 | `ui:slots:<slot>` | low | render into a named SPA slot (e.g. `core.nav.workspace`) |
@@ -239,6 +241,97 @@ in this repo in sync if that catalog ever grows.
   }
   ```
 
+### Seeded surfaces: `tasks` and `agents`
+
+Two contributions behave unlike every other entry above. They don't *mount*
+something owned by the app — they **seed** an object into a store the user
+also edits by hand, so both follow one rule:
+
+> **Create-if-absent, matched by identity, never updated, never removed on
+> uninstall.**
+
+An existing object is left exactly as it is. Nothing you change in a later
+app version reaches an installation that already seeded — ship it under a
+new identity, or the user edits theirs. That is deliberate: a schedule and a
+system prompt are precisely the things people tune, and an app re-asserting
+its own copy on every boot (activation re-runs on *every* boot) would undo
+that silently. It also means an object the user already made by hand is
+recognised rather than duplicated.
+
+Neither can fail an install. Core has no storage for either — it dispatches
+to whichever installed app provides the surface (`aw-app-tasks`,
+`aw-app-agents-platform-runners`) and swallows every error to a log. If no
+provider is loaded yet the declaration is **held** and replayed when one
+appears, and the provider sweeps every already-loaded app when it activates
+— so activation order doesn't matter, and declare the provider as a
+`required: false` dependency, not a hard one.
+
+Full docs, with the field tables and the failure matrix:
+[`docs/contributing-tasks.md`](../../docs/contributing-tasks.md) ·
+[`docs/contributing-agents.md`](../../docs/contributing-agents.md).
+Complete, validating example manifests: [`examples/`](../../examples/).
+
+- **`tasks`** — scheduled work the app depends on (needs `tasks:contribute`).
+  Identity is the **`name`**. `enabled` defaults to **false** — a task that
+  starts firing the moment an app is installed is a surprise.
+  ```jsonc
+  "contributes": {
+    "tasks": [
+      { "name": "Indexer — nightly rebuild",
+        "type": "agentic_output",              // or "terminal" (fires a prompt)
+        "command": "indexer-cli rebuild --quiet",
+        "notify_exit_codes": [1, 2],           // agentic_output only
+        "schedules": [{ "kind": "daily", "time": "03:00" }] }
+    ]
+  }
+  ```
+  Schedule kinds: `once` (`at`), `daily` (`time`), `weekly` (`days` 0=Mon,
+  `time`), `monthly` (`day_of_month`, `time`), `cron` (`expr`). Several are
+  allowed; it fires on whichever comes first. An empty list = manual-only.
+
+- **`agents`** — the Agents Platform objects the app's features need (needs
+  `agents:contribute`). Identity is the **`slug`**, which is the platform's
+  own natural key. An object of four lists, and **the key order is the
+  creation order**: an Agent references a model, a config and a group by
+  slug, and the platform stores those as plain strings — so a group that
+  doesn't exist yet doesn't error, it produces an agent pointing at nothing.
+  The provider always creates models → configs → groups → agents; your
+  manifest never has to sequence it. Every key is optional.
+  ```jsonc
+  "contributes": {
+    "agents": {
+      "models": [
+        { "slug": "secreview-sonnet", "provider": "anthropic",
+          "model_id": "claude-sonnet-5" }
+      ],
+      "agent_configs": [
+        { "slug": "secreview-config", "name": "Security Review Config",
+          "extra_volumes": ["/opt/aw-workspace/repos:/repos:ro"] }
+      ],
+      "groups": [
+        { "slug": "secreview-reviewers", "name": "Security Reviewers",
+          "instructions_file": "prompts/reviewers-group.md" }
+      ],
+      "agents": [
+        { "slug": "secreview-sonnet-agent", "name": "Security Reviewer",
+          "system_prompt_file": "prompts/security-reviewer.md",
+          "model_slug": "secreview-sonnet",
+          "agent_config_slug": "secreview-config",
+          "group_slug": "secreview-reviewers",
+          "skill_slugs": ["aw-agent-qa"] }
+      ]
+    }
+  }
+  ```
+  **Long prompts go in files, not JSON.** `system_prompt_file` (agents) and
+  `instructions_file` (groups) take a path inside your package, inlined by
+  the workspace before the declaration reaches the provider; paths are
+  confined to the package. A missing one is the quietest failure here — the
+  agent is still created, with an empty prompt — so `validate_manifest.py`
+  fails the build on it. Pair this with `contributes.skills`: put the
+  durable contract in a SKILL.md and keep the prompt to the lines that point
+  at it.
+
 ### Window widget vocabulary (`windows/*.json`)
 
 `layout: "stack"`, `regions: [{ id, widgets: [...] }]`. Widget `type`:
@@ -247,6 +340,13 @@ in this repo in sync if that catalog ever grows.
 `app_iframe` (`{ app_id, path }` — resolves to the app's **external
 subdomain** `https://<app_id>.app.<slug>.workspace.<apex>`, honoring the LAN
 fast-path; use this to surface a Tier-2 container's own web UI).
+
+> **An `iframe` panel must supply its own `body { padding: 12px }`.** The host
+> renders it in a **cross-origin** document, so no stylesheet of its can reach
+> inside, and padding on the `<iframe>` element only shifts the origin while
+> the document keeps its full layout width — clipping the right-hand side and
+> adding an inner horizontal scrollbar (tried in aw-workspace-ui and reverted,
+> 2026-08-13). Without your own padding the panel sits flush against the frame.
 
 > **An `iframe` panel must supply its own `body { padding: 12px }`.** The host
 > renders it in a **cross-origin** document, so no stylesheet of its can reach
