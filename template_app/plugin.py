@@ -52,8 +52,15 @@ class HelloAppPlugin:
         clis = manifest.get("contributes", {}).get("system_clis", [])
         installed = []
         for cli in clis:
+            # `verify` (aw-app.json) decides what "installed" MEANS for a
+            # CLI: a command that must succeed, not just the name being on
+            # PATH. Defaults to `<name> --version`. Always thread it through —
+            # without it the framework falls back to a presence check, which
+            # cannot tell a working CLI from a broken one. See the
+            # aw-create-app skill, "The installer contract".
             ctx.commands.install_system_cli(
-                cli["name"], cli["installer"], uninstall="scripts/uninstall.sh"
+                cli["name"], cli["installer"], uninstall="scripts/uninstall.sh",
+                verify=cli.get("verify"),
             )
             installed.append(cli["name"])
 

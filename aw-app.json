@@ -32,7 +32,8 @@
     "system_clis": [
       {
         "name": "hello",
-        "installer": "scripts/install_hello.sh"
+        "installer": "scripts/install_hello.sh",
+        "verify": "hello --version"
       }
     ],
     "routes": [
