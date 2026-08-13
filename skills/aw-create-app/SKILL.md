@@ -68,6 +68,38 @@ Two tiers:
 }
 ```
 
+### `description` is product copy, not architecture notes
+
+`description` is the only sentence most people ever read about your app —
+it's the marketplace card and the Apps grid tile. **An app is a product.**
+Write it for the person deciding whether to install: what it does for them,
+benefit first, in plain language. Same for `name` — a product name, not a
+module name.
+
+Keep internal architecture out of it. No ADR or decision numbers, no
+capability slugs (`commands:install`), no route shapes, no
+"component-mode frontend bundle", no porting/migration history. A builder
+looking for those reads README.md and this skill; on the card they're noise
+that answers none of the reader's actual question.
+
+This template's own description used to fail that test:
+
+> ~~TEMPLATE — a minimal, fully working decoupled app: installs one trivial
+> CLI (`hello`, …) through the gated commands:install facade, contributes a
+> backend sub-app (GET /hello + app-local WS /ws/echo under the app
+> namespace) and a component-mode frontend bundle, and runs standalone too
+> (ADR Decision 4/6).~~
+
+Every clause is true and none of it is for the reader. What it says now
+leads with what you get:
+
+> TEMPLATE — the fastest way to start a new aw-workspace app. Install it and
+> you have a working app on day one: a `hello` CLI that prints a
+> configurable greeting, its own window, and an HTTP + WebSocket backend …
+
+Rule of thumb: if a sentence would only make sense to someone who has read
+this skill, it belongs in README.md instead.
+
 `config_schema` is **optional** — omit it entirely if your app has no config
 at all. Add it when there's a real knob to expose:
 
