@@ -30,17 +30,28 @@ A working example lives in [`examples/contributes-tasks/`](../examples/contribut
 }
 ```
 
-Two task types:
+Three task types:
 
 * **`agentic_output`** — runs a `command` and notifies you when it exits
   with one of `notify_exit_codes`. Cheap; nothing agentic runs unless the
   exit code says something is worth looking at.
 * **`terminal`** — fires a `prompt` into a reusable CLI agent session.
+* **`agent_prompt`** — dispatches a `prompt` to the Agents Platform agent
+  named by `agent_slug`. This is the one to pair with
+  [`contributes.agents`](contributing-agents.md): an app that ships an agent
+  *and* the schedule driving it declares both, and the pair arrives together
+  on install instead of needing someone to wire them up by hand.
 
 Fields: `name` (**required**, and the identity — see below), `type`
 (default `terminal`), `command` (required for `agentic_output`), `prompt`
-(required for `terminal`), `cli_type`, `notify_exit_codes` (list or
+(required for `terminal` and `agent_prompt`), `agent_slug` (**required** for
+`agent_prompt`), `reuse_session`, `cli_type`, `notify_exit_codes` (list or
 comma-string), `schedules`, `enabled`.
+
+An `agent_prompt` task without an `agent_slug` is rejected at install time
+rather than seeded. The alternative is a row that looks fine in the Tasks UI
+and then quietly dispatches to nobody at 03:00 — this workspace's
+characteristic failure, and worth one more validation to avoid.
 
 `enabled` **defaults to `false`**, deliberately: a task that starts firing
 the moment an app is installed is a surprise. The seeded schedule is a

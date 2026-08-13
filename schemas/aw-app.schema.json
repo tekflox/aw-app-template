@@ -269,9 +269,19 @@
               "type": {
                 "enum": [
                   "terminal",
-                  "agentic_output"
+                  "agentic_output",
+                  "agent_prompt"
                 ],
                 "default": "terminal"
+              },
+              "agent_slug": {
+                "type": "string",
+                "description": "Agents Platform agent the prompt is dispatched to. Required for type 'agent_prompt' — an app shipping both an agent (contributes.agents) and the schedule that drives it names that agent here."
+              },
+              "reuse_session": {
+                "type": "boolean",
+                "default": false,
+                "description": "For type 'agent_prompt': keep firing into the same Agents Platform session instead of starting a fresh one each run."
               },
               "cli_type": {
                 "type": "string"
