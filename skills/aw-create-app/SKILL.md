@@ -248,6 +248,13 @@ in this repo in sync if that catalog ever grows.
 subdomain** `https://<app_id>.app.<slug>.workspace.<apex>`, honoring the LAN
 fast-path; use this to surface a Tier-2 container's own web UI).
 
+> **An `iframe` panel must supply its own `body { padding: 12px }`.** The host
+> renders it in a **cross-origin** document, so no stylesheet of its can reach
+> inside, and padding on the `<iframe>` element only shifts the origin while
+> the document keeps its full layout width — clipping the right-hand side and
+> adding an inner horizontal scrollbar (tried in aw-workspace-ui and reverted,
+> 2026-08-13). Without your own padding the panel sits flush against the frame.
+
 ## 5. Backend routes (HTTP + WS)
 
 Every app that has a server side ships exactly ONE mode-agnostic factory,
