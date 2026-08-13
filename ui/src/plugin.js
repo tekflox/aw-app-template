@@ -30,19 +30,25 @@ export function register(host) {
   });
 
   // --- Pattern A: a visible slot component --------------------------------
-  // Renders a tiny status pill into core.nav (needs "ui:slots:core.nav" in
-  // aw-app.json's permissions). Delete this block if your app is headless
-  // (Pattern B only) — a plugin bundle is not required to fill any slot.
-  function TemplateNavPill() {
-    const [status, setStatus] = host.React.useState('…');
-    host.React.useEffect(() => {
-      client.hello()
-        .then((r) => setStatus(r.message))
-        .catch((e) => setStatus(`error: ${e.message}`));
-    }, []);
-    return host.h('span', { title: status }, 'template');
-  }
-  host.registerSlot('core.nav', TemplateNavPill);
+  // COMMENTED OUT ON PURPOSE. This is the reference implementation of a slot
+  // component and it works as-is — but the template is installed in real
+  // workspaces, and a live registerSlot('core.nav', …) puts a stray
+  // "template" pill in everyone's nav bar. Uncomment the block below (the
+  // "ui:slots:core.nav" permission is already declared in aw-app.json) when
+  // your app really does want to render there; delete it if your app is
+  // headless (Pattern B only) — a plugin bundle is not required to fill any
+  // slot.
+  //
+  // function TemplateNavPill() {
+  //   const [status, setStatus] = host.React.useState('…');
+  //   host.React.useEffect(() => {
+  //     client.hello()
+  //       .then((r) => setStatus(r.message))
+  //       .catch((e) => setStatus(`error: ${e.message}`));
+  //   }, []);
+  //   return host.h('span', { title: status }, 'template');
+  // }
+  // host.registerSlot('core.nav', TemplateNavPill);
 
   // --- Pattern B: headless background work --------------------------------
   // register(host) may start background work (open a WS, install listeners)

@@ -11,7 +11,9 @@ correct permissions ceiling, auto-merge).
 
 It's a real, working app — not just files. `hello` installs one trivial CLI
 that prints a configurable greeting, contributes a tiny backend sub-app
-(`GET /hello` + `WS /ws/echo` inside the app mount) and a `core.nav` frontend slot, and runs
+(`GET /hello` + `WS /ws/echo` inside the app mount) and a frontend bundle (with a
+`core.nav` slot component written out but commented out — see `ui/src/plugin.js`
+— so the template adds no stray pill to a real workspace's nav), and runs
 standalone too (`python -m template_app`) — so cloning this template and
 pushing to `master` gives you a green CI run, a tagged release, and a
 marketplace catalog entry before you've changed a single line. See
@@ -118,8 +120,9 @@ by hand.
   prefix, serves `ui/dist/` statically, no `IdentityGuard`.
 - `ui/` — the frontend half, mode-agnostic (ADR Decision 3/4): `src/client.js`
   is the framework-free core; `src/plugin.js` is the integrated-mode
-  `register(host)` entry (a `core.nav` slot component + a headless WS
-  client), built by Vite in **lib mode** with `react`/`react-dom` externalized
+  `register(host)` entry (a `core.nav` slot component, commented out so the
+  template stays invisible in the nav, + a live headless WS client), built by
+  Vite in **lib mode** with `react`/`react-dom` externalized
   (`vite.config.js --mode plugin` → `dist/template.js`, referenced from
   `aw-app.json`'s `contributes.frontend.bundle`); `src/standalone.js` +
   `index.html` is the standalone page (`vite.config.js --mode standalone` →

@@ -532,7 +532,9 @@ needs touching.
 
 - `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `hello`
   CLI) + `routes:register`/`ui:code` (a `/hello` + `/ws/echo` sub-app, a
-  `core.nav` slot component, and standalone mode — §5–§7 above).
+  `core.nav` slot component — shipped commented out, so the template itself
+  renders nothing in the nav; uncomment it in your app — and standalone
+  mode — §5–§7 above).
 - `aw-app-whiteboard` — Tier-1 + `routes:register` + `db:own-tables` + a window.
 - `aw-app-devctl` — Tier-1 + `routes:register` (talks CDP to another app's container).
 - `aw-app-browser` — Tier-2 container + `app_iframe` window → external subdomain (noVNC).

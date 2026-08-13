@@ -1,37 +1,29 @@
-function f({ apiUrl: n, wsUrl: a, fetchImpl: o = fetch }) {
-  async function r() {
-    const t = await o(n("/hello"));
-    if (!t.ok) throw new Error(`GET /hello -> ${t.status}`);
-    return t.json();
+function f({ apiUrl: c, wsUrl: a, fetchImpl: s = fetch }) {
+  async function e() {
+    const n = await s(c("/hello"));
+    if (!n.ok) throw new Error(`GET /hello -> ${n.status}`);
+    return n.json();
   }
-  function e({ onOpen: t, onMessage: s, onClose: u } = {}) {
-    const c = new WebSocket(a("/ws/echo"));
-    return t && c.addEventListener("open", t), s && c.addEventListener("message", (l) => s(l.data)), u && c.addEventListener("close", u), {
-      send: (l) => c.send(l),
-      close: () => c.close(),
-      raw: c
+  function o({ onOpen: n, onMessage: l, onClose: d } = {}) {
+    const t = new WebSocket(a("/ws/echo"));
+    return n && t.addEventListener("open", n), l && t.addEventListener("message", (i) => l(i.data)), d && t.addEventListener("close", d), {
+      send: (i) => t.send(i),
+      close: () => t.close(),
+      raw: t
     };
   }
-  return { hello: r, connectEcho: e };
+  return { hello: e, connectEcho: o };
 }
-const i = "hello";
-function p(n) {
-  const a = f({
-    apiUrl: (e) => `/api/apps/${i}${e}`,
-    wsUrl: (e) => n.sdk.api.wsUrl(`/api/apps/${i}${e}`),
-    fetchImpl: (e, t) => n.sdk.api.fetch(e, t)
+const r = "hello";
+function p(c) {
+  const s = f({
+    apiUrl: (e) => `/api/apps/${r}${e}`,
+    wsUrl: (e) => c.sdk.api.wsUrl(`/api/apps/${r}${e}`),
+    fetchImpl: (e, o) => c.sdk.api.fetch(e, o)
+  }).connectEcho({
+    onMessage: (e) => console.debug(`[${r}] echo:`, e)
   });
-  function o() {
-    const [e, t] = n.React.useState("…");
-    return n.React.useEffect(() => {
-      a.hello().then((s) => t(s.message)).catch((s) => t(`error: ${s.message}`));
-    }, []), n.h("span", { title: e }, "template");
-  }
-  n.registerSlot("core.nav", o);
-  const r = a.connectEcho({
-    onMessage: (e) => console.debug(`[${i}] echo:`, e)
-  });
-  n.onDispose(() => r.close());
+  c.onDispose(() => s.close());
 }
 export {
   p as default,
