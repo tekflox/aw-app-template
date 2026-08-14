@@ -55,7 +55,7 @@ seeding failure). The useful ones:
 | Kind | Fields |
 |---|---|
 | `models` | `slug`, `provider` (`anthropic`/`openai`/`bedrock`/`cli`/`echo`/`fake`), `model_id`, `display_name` (defaults to the slug), `params`, `enabled` |
-| `agent_configs` | `slug`, `name`, `description`, `mcp_config`, `extra_volumes`, `permissions`, `auto_compact_threshold_tokens` |
+| `agent_configs` | `slug`, `name`, `description`, `mcp_servers` (preferred — see below), `mcp_config`, `extra_volumes`, `permissions`, `auto_compact_threshold_tokens` |
 | `groups` | `slug`, `name`, `description`, `instructions`, `capabilities`, `kanban_target_status` |
 | `agents` | `slug`, `name`, `description`, `system_prompt`, `model_slug`, `agent_config_slug`, `group_slug`, `skill_slugs`, `use_cases`, `capabilities`, `tool_specs`, `params`, `mcp_config`, `extra_volumes`, `permissions`, `inherit_from`, `hidden_from_flow`, `kanban_target_status`, `icon`, `color` |
 | `agent_flows` | `slug`, `name`, `description`, `enabled`, `graph`, `max_hops`, `budget_tokens`, `budget_usd` |
@@ -115,6 +115,64 @@ inline `system_prompt` wins if you somehow declare both.
 
 Pair this with `contributes.skills`: put the durable, versioned contract in
 a SKILL.md and keep the `system_prompt` to the few lines that point at it.
+
+## MCP servers: declare the name, never the credential
+
+An agent that can't reach the workspace's MCP gateway has no knowledge
+base, no Kanban and none of the Agents Flow terminal actions — for most
+contributed agents that is the difference between working and not. But the
+gateway entry is `{url, headers: {Authorization: Bearer <token>}}`, and a
+manifest is a public artefact that ships to a marketplace.
+
+So **an app never writes a token.** It names the server it wants:
+
+```jsonc
+"agent_configs": [
+  { "slug": "my-app-config", "name": "My App",
+    "mcp_servers": ["aw-gateway"] }
+]
+```
+
+At install the workspace resolves that name against its own canonical
+`.mcp.json` — the file the gateway app writes itself on boot — and
+substitutes the real URL and bearer token before anything is POSTed. The
+manifest carries an intention; the credential never leaves the machine, and
+the person installing your app is never asked for a token they'd have no
+way to obtain.
+
+### The credential is refreshed; the content is not
+
+This is the one place the seed-once rule below does **not** apply, and the
+distinction is worth stating precisely:
+
+| | On re-activation |
+|---|---|
+| `system_prompt`, `model_slug`, a flow `graph`, a name | **Left alone forever.** A user may have tuned it. |
+| `mcp_config` that came from `mcp_servers` | **Re-asserted every time.** |
+
+A bearer token is not content. Nobody typed it, nobody tuned it, and it
+stops working the moment the gateway rotates it. Freezing it at first
+install is how you get an agent whose config looks perfect in the UI and
+has no MCP surface at all: the gateway 401s, the client registers **zero
+tools**, and nothing anywhere logs it — the agent just behaves as though it
+were bad at its job. That failure took a full day to find on 2026-08-14.
+
+Only entries that used `mcp_servers` are refreshed, and only that one
+field, so a prompt you edited in the UI survives. An app that spells
+`mcp_config` out by hand owns it and is never touched.
+
+### Rules of thumb
+
+* **Use `mcp_servers`, not `mcp_config`.** Reach for the explicit form only
+  if you genuinely need a server the workspace's `.mcp.json` doesn't
+  describe — and then it is yours to keep working.
+* **Don't pin the gateway's address.** Let resolution supply it. The host
+  is spelled differently depending on who has to reach it (`127.0.0.1`,
+  `aw-app-mcp-gateway`, the bridge gateway IP) and hardcoding one has
+  already caused a silent outage.
+* **A name that isn't in `.mcp.json` resolves to nothing** — the entry is
+  dropped with a warning and the agent seeds without it. Check the install
+  logs if an agent comes up toolless.
 
 ## Seeded, not owned
 
