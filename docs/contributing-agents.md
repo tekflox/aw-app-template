@@ -23,19 +23,21 @@ A working example lives in [`examples/contributes-agents/`](../examples/contribu
       "models":        [ /* Model        */ ],
       "agent_configs": [ /* AgentConfig  */ ],
       "groups":        [ /* AgentGroup   */ ],
-      "agents":        [ /* Agent        */ ]
+      "agents":        [ /* Agent        */ ],
+      "agent_flows":   [ /* AgentFlow    */ ]
     }
   }
 }
 ```
 
 **The key order is the creation order, and it is not cosmetic.** An Agent
-references a model, an agent config and a group *by slug*, and Agents
-Platform stores those as plain strings — declaring an agent whose group
-doesn't exist yet doesn't error, it produces an agent pointing at nothing.
-The provider always creates models → configs → groups → agents, so your
-manifest never has to think about it. Declare only the kinds you need;
-every key is optional.
+references a model, an agent config and a group *by slug*, and an Agents
+Flow's graph names agents by slug — Agents Platform stores all of those as
+plain strings, so declaring an agent whose group doesn't exist yet doesn't
+error, it produces an agent pointing at nothing. The provider always
+creates models → configs → groups → agents → agent_flows, so your manifest
+never has to think about it. Declare only the kinds you need; every key is
+optional.
 
 Every entry needs a **`slug`** — that is the identity of a seeded object
 (see "Seeded, not owned" below), so the workspace rejects a manifest with a
@@ -56,6 +58,43 @@ seeding failure). The useful ones:
 | `agent_configs` | `slug`, `name`, `description`, `mcp_config`, `extra_volumes`, `permissions`, `auto_compact_threshold_tokens` |
 | `groups` | `slug`, `name`, `description`, `instructions`, `capabilities`, `kanban_target_status` |
 | `agents` | `slug`, `name`, `description`, `system_prompt`, `model_slug`, `agent_config_slug`, `group_slug`, `skill_slugs`, `use_cases`, `capabilities`, `tool_specs`, `params`, `mcp_config`, `extra_volumes`, `permissions`, `inherit_from`, `hidden_from_flow`, `kanban_target_status`, `icon`, `color` |
+| `agent_flows` | `slug`, `name`, `description`, `enabled`, `graph`, `max_hops`, `budget_tokens`, `budget_usd` |
+
+### Agents Flows — the topology, not an execution DAG
+
+An `agent_flows` entry is a *capability graph*: which agents may hand off
+to which, starting from a `source` node (the inbound channel). It is not a
+`Workflow` — nothing executes it. What it does is guidance: when a flow is
+`enabled`, every agent appearing as a node in it gets the `aw-agents-flow`
+skill plus the list of agents directly connected to it injected into its
+system prompt at dispatch time. The agent can still call anyone; the list
+is a map, not a fence.
+
+```jsonc
+{ "slug": "software-engineering", "name": "Agents Flow: Software Engineering",
+  "enabled": true,
+  "graph": {
+    "nodes": [
+      { "id": "source",           "type": "source", "label": "Source",
+        "position": { "x": 40, "y": 240 } },
+      { "id": "agent-architect",  "type": "agent", "agent_slug": "architect",
+        "label": "Architect", "position": { "x": 560, "y": 140 } }
+    ],
+    "edges": [ { "id": "e1", "source": "source", "target": "agent-architect" } ]
+  }
+}
+```
+
+A node is `{id, type, label, position}` plus `agent_slug` (`type: "agent"`)
+or `group_slug` (`type: "group"`). Exactly one `source` node, and its `id`
+must be the literal `"source"` — that's what the flow editor expects when
+it re-opens your graph. `position` is only for the editor's canvas, but
+omit it and every node stacks at the origin the first time somebody opens
+the flow. Edges are undirected in effect: the injected list is everything
+adjacent to you, whichever end of the edge you sit on.
+
+Ship the agents and the flow in the same manifest. A team of agents that
+doesn't say how it connects is just a list of agents.
 
 ### Long prompts live in files
 
