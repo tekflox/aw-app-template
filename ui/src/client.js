@@ -4,8 +4,8 @@
 // plugin.js and standalone.js build the same {apiUrl, wsUrl} shape and hand
 // it here; nothing else differs between the two modes.
 //
-//   apiUrl:    (sub) => string        e.g. sub="/hello"   -> ".../api/apps/hello/hello"
-//   wsUrl:     (sub) => string        e.g. sub="/ws/echo" -> "ws(s)://.../api/apps/hello/ws/echo"
+//   apiUrl:    (sub) => string        e.g. sub="/hello"   -> ".../api/apps/aw-app-template/hello"
+//   wsUrl:     (sub) => string        e.g. sub="/ws/echo" -> "ws(s)://.../api/apps/aw-app-template/ws/echo"
 //
 // App-owned top-level WebSocket namespaces are reserved at /ws/apps/<slug>/...
 // so apps never claim root /ws/*; root /ws/* stays AW core/control-plane only.

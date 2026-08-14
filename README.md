@@ -9,7 +9,7 @@ skeleton: manifest, plugin, tests, and a CI/CD pipeline wired to the
 fix that's landed on that pipeline so far (test-gating before release,
 correct permissions ceiling, auto-merge).
 
-It's a real, working app — not just files. `hello` installs one trivial CLI
+It's a real, working app — not just files. `aw-app-template` installs one trivial `hello` CLI
 that prints a configurable greeting, contributes a tiny backend sub-app
 (`GET /hello` + `WS /ws/echo` inside the app mount) and a frontend bundle (with a
 `core.nav` slot component written out but commented out — see `ui/src/plugin.js`
@@ -31,7 +31,7 @@ gh repo create tekflox/aw-app-<yourapp> --template tekflox/aw-app-template --pub
 git clone https://github.com/tekflox/aw-app-<yourapp>
 ```
 
-Then rename everything marked **TEMPLATE** in comments and every `hello`/
+Then rename everything marked **TEMPLATE** in comments and every `aw-app-template`/`hello`/
 `template_app` occurrence:
 
 1. **`aw-app.json`** — `id`, `name`, `description`, `runtime.entrypoint`,
@@ -95,7 +95,7 @@ by hand.
 
 ## Layout
 
-- `aw-app.json` — the manifest (`id: hello`, `tier: inprocess`).
+- `aw-app.json` — the manifest (`id: aw-app-template`, `tier: inprocess`).
 - `schemas/aw-app.schema.json` — local structural validator; same schema
   every `aw-app-*` repo validates against — keep it in sync with
   `aw-workspace`'s `src/apps/capabilities.py` (the authoritative permission
@@ -116,7 +116,7 @@ by hand.
   backend sub-app (`GET /hello`, `WS /ws/echo` inside the app mount) shared by integrated mode
   (`plugin.py`) and standalone mode (`__main__.py`) — ADR Decision 2/4/6.
 - `template_app/__main__.py` — standalone entrypoint (`python -m
-  template_app`): mounts `routes.py`'s sub-app at the same `/api/apps/hello`
+  template_app`): mounts `routes.py`'s sub-app at the same `/api/apps/aw-app-template`
   prefix, serves `ui/dist/` statically, no `IdentityGuard`.
 - `ui/` — the frontend half, mode-agnostic (ADR Decision 3/4): `src/client.js`
   is the framework-free core; `src/plugin.js` is the integrated-mode

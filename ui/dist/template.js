@@ -1,31 +1,31 @@
-function f({ apiUrl: c, wsUrl: a, fetchImpl: s = fetch }) {
+function d({ apiUrl: c, wsUrl: r, fetchImpl: s = fetch }) {
   async function e() {
-    const n = await s(c("/hello"));
-    if (!n.ok) throw new Error(`GET /hello -> ${n.status}`);
-    return n.json();
+    const t = await s(c("/hello"));
+    if (!t.ok) throw new Error(`GET /hello -> ${t.status}`);
+    return t.json();
   }
-  function o({ onOpen: n, onMessage: l, onClose: d } = {}) {
-    const t = new WebSocket(a("/ws/echo"));
-    return n && t.addEventListener("open", n), l && t.addEventListener("message", (i) => l(i.data)), d && t.addEventListener("close", d), {
-      send: (i) => t.send(i),
-      close: () => t.close(),
-      raw: t
+  function o({ onOpen: t, onMessage: l, onClose: p } = {}) {
+    const n = new WebSocket(r("/ws/echo"));
+    return t && n.addEventListener("open", t), l && n.addEventListener("message", (a) => l(a.data)), p && n.addEventListener("close", p), {
+      send: (a) => n.send(a),
+      close: () => n.close(),
+      raw: n
     };
   }
   return { hello: e, connectEcho: o };
 }
-const r = "hello";
-function p(c) {
-  const s = f({
-    apiUrl: (e) => `/api/apps/${r}${e}`,
-    wsUrl: (e) => c.sdk.api.wsUrl(`/api/apps/${r}${e}`),
+const i = "aw-app-template";
+function f(c) {
+  const s = d({
+    apiUrl: (e) => `/api/apps/${i}${e}`,
+    wsUrl: (e) => c.sdk.api.wsUrl(`/api/apps/${i}${e}`),
     fetchImpl: (e, o) => c.sdk.api.fetch(e, o)
   }).connectEcho({
-    onMessage: (e) => console.debug(`[${r}] echo:`, e)
+    onMessage: (e) => console.debug(`[${i}] echo:`, e)
   });
   c.onDispose(() => s.close());
 }
 export {
-  p as default,
-  p as register
+  f as default,
+  f as register
 };

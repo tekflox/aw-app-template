@@ -31,7 +31,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .routes import build_routes
 
-SLUG = "hello"  # TEMPLATE: must match aw-app.json's "id"
+SLUG = "aw-app-template"  # TEMPLATE: must match aw-app.json's "id"
 DEFAULT_PORT = 9400  # TEMPLATE: match aw-app.json's runtime.standalone.default_port
 
 APP_ROOT = Path(__file__).resolve().parent.parent

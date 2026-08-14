@@ -10,7 +10,7 @@ scripts/uninstall.sh once), and (2) registers the backend sub-app from
 ``routes.py`` THROUGH the gated ``ctx.routes`` facade (capability
 ``routes:register`` — ADR Decision 2/6, docs/knowledge_base/docs/
 architecture/adr-app-front-back-routes-dual-mode.md), mounted by the
-runtime at ``/api/apps/hello``. The install scripts are idempotent, so the
+runtime at ``/api/apps/aw-app-template``. The install scripts are idempotent, so the
 reconciler safely re-runs activate on every boot / workspace recreation.
 
 TEMPLATE: this is the whole pattern every aw-app-* Tier-1 app uses — copy
@@ -38,7 +38,7 @@ import os
 
 from . import routes as routes_mod
 
-log = logging.getLogger("aw_apps.hello")
+log = logging.getLogger("aw_apps.app_template")
 
 
 class HelloAppPlugin:

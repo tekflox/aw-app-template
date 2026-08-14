@@ -14,8 +14,8 @@ docs/knowledge_base/docs/architecture/adr-app-front-back-routes-dual-mode.md).
 Keep every path here RELATIVE (no ``/api/apps/<slug>`` prefix) so client
 code and docs use one path shape in both modes:
 
-    integrated: /api/apps/hello/hello        /api/apps/hello/ws/echo
-    standalone: /api/apps/hello/hello        /api/apps/hello/ws/echo
+    integrated: /api/apps/aw-app-template/hello        /api/apps/aw-app-template/ws/echo
+    standalone: /api/apps/aw-app-template/hello        /api/apps/aw-app-template/ws/echo
 
 Integrated in-process WS path shape (Decision 2):
 ``/api/apps/<slug>/ws/<name>`` — this sub-app declares

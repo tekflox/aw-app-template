@@ -5,7 +5,7 @@
 
 import { createClient } from './client.js';
 
-const SLUG = 'hello'; // TEMPLATE: must match aw-app.json's "id"
+const SLUG = 'aw-app-template'; // TEMPLATE: must match aw-app.json's "id"
 
 const client = createClient({
   apiUrl: (sub) => `/api/apps/${SLUG}${sub}`,
