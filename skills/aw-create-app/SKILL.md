@@ -249,6 +249,55 @@ in this repo in sync if that catalog ever grows.
     }
   }
   ```
+
+  **If your upstream needs a credential, ship `mcp.template.json`, not
+  `mcp.json`.** The gateway scans `apps/<slug>/mcp.json` in the installed
+  *package* dir, and an update overwrites that dir wholesale — so a token
+  written into it survives exactly until the next version bump, after which
+  the upstream stays listed and serves **zero tools** with nothing reporting
+  it. A Tier-1 app can dodge this by rewriting its own `mcp.json` on
+  `activate` (aw-app-notion does, from its secret store); **a Tier-2 container
+  app runs no workspace-side code and has no such escape.**
+
+  So the runtime renders the template for you, on every activation *and*
+  every config save:
+
+  ```jsonc
+  // mcp.template.json  — versioned in your repo
+  {
+    "mcpServers": {
+      "my-service": {
+        "enabled": true,
+        "type": "http",
+        "url": "http://aw-app-myapp:8123/api/mcp",
+        "headers": { "Authorization": "Bearer ${config.mcp_token}" }
+      }
+    }
+  }
+  ```
+
+  Pair it with an `mcp_token` field in `config_schema`. The value lands in
+  `<AW_WORKSPACE_HOME>/app-config/<app_id>.json` (`config_store`), which lives
+  outside the package dir and which **uninstall deliberately keeps** — so the
+  credential survives an update, an uninstall/install and a workspace
+  redeploy with nobody re-pasting anything.
+
+  Three things to know:
+
+  - Same `${config.x}` / `${env.X}` / `${app.url}` grammar as `runtime.env`,
+    including `|` fallback — but here placeholders **interpolate inside a
+    larger string**, because `"Bearer ${config.mcp_token}"` is the shape
+    every credentialed upstream needs. In `runtime.env` they stay
+    whole-value.
+  - An **unresolved placeholder disables that one server** rather than
+    shipping it. A literal `${config.mcp_token}` in an auth header doesn't
+    fail loudly — it connects, 401s, and serves nothing.
+  - The rendered `mcp.json` is **generated**. Don't commit it, don't edit the
+    installed copy, and add it to `.gitignore`.
+
+  Implementation: `src/apps/mcp_template.py` in aw-workspace. Apps that ship
+  `mcp.json` directly (aw-app-browser, aw-app-code-server) are untouched — no
+  template, no-op.
 - **`skills`** — teach an agent how to use/build with this app. Each entry:
   `{ "id": "my-skill", "path": "skills/my-skill/SKILL.md", "description": "..." }`
   — no extra permission needed, every app gets this for free. On install, the
