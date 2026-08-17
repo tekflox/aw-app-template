@@ -184,6 +184,11 @@ sync.
 | `tasks:contribute` | low | seed scheduled tasks on install (created once, never updated) |
 | `agents:contribute` | low | seed Agents Platform models/configs/groups/agents on install (created once, never updated) |
 | `containers:manage` | **high** | run/manage sidecar containers (Tier-2) |
+| `host:device-kvm` | **high** | `/dev/kvm` in the app's container — a KVM guest |
+| `host:device-tun` | **high** | `/dev/net/tun` + `NET_ADMIN` — a guest's own NIC |
+| `host:device-fuse` | **high** | `/dev/fuse` + `SYS_ADMIN` — FUSE mounts |
+| `host:device-binder` | **high** | the Android binder devices — a redroid guest |
+| `host:privileged` | **high** | `--privileged` — every device and capability, no isolation |
 | `ui:code` | **high** | load the app's JS bundle into the SPA |
 | `ui:slots:<slot>` | low | render into a named SPA slot (e.g. `core.nav.workspace`) |
 | `config:extend:<app>` | high | write config into another app's extension point |
@@ -629,6 +634,65 @@ root-level route or WS path for an app feature (`/ws/devctl` was the
 mistake this ADR undoes; use `/ws/apps/<id>/...` for top-level app-owned
 WS namespaces), implement your own auth on an integrated route,
 or bundle your own copy of React into a plugin bundle.
+
+## 8b. Apps that need a real device (`runtime.host_power`)
+
+An app that runs a **guest** rather than a process cannot be built out of
+userspace: without `/dev/kvm` a Windows VM falls back to software emulation
+and is unusably slow, without `/dev/net/tun` it has no NIC, an Android guest
+needs the binder devices. A Tier-2 container gets none of those by default,
+and that stays the default.
+
+`runtime.host_power` is the exception, gated three independent ways — and note
+that **you only control the first two**:
+
+1. **the app asks** — `runtime.host_power: ["kvm", "tun"]`;
+2. **the app may ask** — the matching `host:*` permission from §3, all high
+   risk, so marketplace-signed apps only;
+3. **the machine offers it** — whoever owns the BYOD host runs
+   `aw-remote-host bootstrap-workspace --host-power=kvm,tun`.
+
+```jsonc
+"tier": "container",                    // Tier-1 apps cannot be elevated
+"runtime": {
+  "image": "dockurr/windows",
+  "port": 8006,
+  "host_power": ["kvm", "tun"]
+},
+"permissions": ["containers:manage", "host:device-kvm", "host:device-tun"]
+```
+
+Grants: `kvm`, `tun`, `fuse`, `binder`, `privileged`, and `all` — which means
+every grant **except** `privileged`, because "every device this host offers"
+and "dissolve the container boundary" are different decisions and a keyword
+must not make the second one for you.
+
+Rules worth knowing before you write the manifest:
+
+- **A missing leg fails the install**, naming the leg and the command that
+  fixes it. It does not start a container without the grant: a VM that comes up
+  in software emulation reads as "the app is broken", with the real cause
+  (a host that never opted in) nowhere in sight.
+- **Ask for what you need, not `all`.** `all` in an app manifest requests four
+  device grants and makes the app uninstallable on any host that cannot supply
+  all four — including hosts that would have run it fine with two.
+- **`tier: container` only.** A Tier-1 app already has the workspace's own
+  access; the key there would read as a privilege and change nothing, so it is
+  a manifest error.
+- **Sidecars are refused, not ignored** (`runtime.sidecars[].host_power`) —
+  tolerating it would start a companion container without its device while the
+  manifest read as correct.
+- **`--privileged` as a `run_flags_needed` entry is still rejected**, and
+  always will be: that channel carries none of these checks.
+
+Verifying it took effect: `aw-remote-host status` prints requested vs
+effective with a reason per refusal (a request is not a grant — there is no
+`/dev/kvm` on macOS), `aw-workspace-cli doctor` lists the grants and which apps
+use them, and aw-console's remote-host panel shows a **Host power** badge plus
+the delta.
+
+Full reference, including the host-side commands and where each piece of code
+lives: [`docs/host-power.md`](../../docs/host-power.md).
 
 ## 9. Depending on another app (`dependencies.apps`)
 
