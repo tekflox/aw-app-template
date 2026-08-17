@@ -96,10 +96,12 @@ by hand.
 ## Layout
 
 - `aw-app.json` — the manifest (`id: aw-app-template`, `tier: inprocess`).
-- `schemas/aw-app.schema.json` — local structural validator; same schema
-  every `aw-app-*` repo validates against — keep it in sync with
-  `aw-workspace`'s `src/apps/capabilities.py` (the authoritative permission
-  catalog) if that ever adds a new capability string.
+- `tests/validate_manifest.py` — runs the same checks CI does, locally.
+  The schema is **not** copied into this repo: it lives in aw-marketplace
+  (`schemas/aw-app.schema.json`, its permissions pattern generated from
+  core's `src/apps/capabilities.py`) and the validator finds it in a sibling
+  checkout. 28 repos used to each freeze their own copy; they drifted into 11
+  versions, so a green local run said nothing about the release.
 - `scripts/install_hello.sh` — installs a trivial `hello` command into the
   workspace's persistent bin dir (`~/.aw-workspace/bin`, on PATH, survives
   restarts). Idempotent.

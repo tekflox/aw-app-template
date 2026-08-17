@@ -125,7 +125,9 @@ knob, hidden by `config_visible: false`. Flip it to `true` (or delete the
 field, since that's the default) once your app has settings worth exposing
 in the UI — see aw-app-git for a real example with the gear on.
 
-Validate it: `python tests/validate_manifest.py` (schema in `schemas/aw-app.schema.json`).
+Validate it: `python tests/validate_manifest.py` — the schema is not in this
+repo, it lives in aw-marketplace and the validator picks it up from a sibling
+checkout (or `--schema <path>`). Do not copy it in.
 
 ### Calling another route on this workspace (or from an external MCP)
 
@@ -163,8 +165,10 @@ class MyAppPlugin:
 
 Only request what you use — each is enforced by the runtime's `AppContext`.
 Authoritative source: aw-workspace `src/apps/capabilities.py` (mirrored in
-aw-backend `src/api/app_capabilities.py`) — keep `schemas/aw-app.schema.json`
-in this repo in sync if that catalog ever grows.
+aw-backend `src/api/app_capabilities.py`). aw-marketplace's canonical schema
+generates its permissions pattern from that catalog, so a new capability
+needs no schema edit here — and no app repo should carry a copy to keep in
+sync.
 
 | Capability | Risk | Grants |
 |---|---|---|
