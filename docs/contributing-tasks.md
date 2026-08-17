@@ -42,16 +42,29 @@ Three task types:
   *and* the schedule driving it declares both, and the pair arrives together
   on install instead of needing someone to wire them up by hand.
 
+<!-- agent_slug-required: agent_prompt, agentic_output -->
+<!-- Parsed by tests/test_docs_match_the_validator.py and compared to
+     aw-workspace's src/apps/manifest.py. Prose is for humans and is a
+     poor thing to assert on — this line is the claim a test can check. -->
+
 Fields: `name` (**required**, and the identity — see below), `type`
 (default `terminal`), `command` (required for `agentic_output`), `prompt`
-(required for `terminal` and `agent_prompt`), `agent_slug` (**required** for
-`agent_prompt`), `reuse_session`, `cli_type`, `notify_exit_codes` (list or
-comma-string), `schedules`, `enabled`.
+(required for `terminal` and `agent_prompt`), `agent_slug` (**required for
+both `agent_prompt` AND `agentic_output`**), `reuse_session`, `cli_type`,
+`notify_exit_codes` (list or comma-string), `schedules`, `enabled`.
 
-An `agent_prompt` task without an `agent_slug` is rejected at install time
-rather than seeded. The alternative is a row that looks fine in the Tasks UI
-and then quietly dispatches to nobody at 03:00 — this workspace's
-characteristic failure, and worth one more validation to avoid.
+An `agent_prompt` **or `agentic_output`** task without an `agent_slug` is
+rejected at install time rather than seeded. `agentic_output` needs one for a
+reason that isn't obvious: it only *notifies* through an agent, but the tasks
+app's runner resolves that agent **before** running the command and bails with
+"no agent_slug configured" if there is none — so the command never executes at
+all. The alternative is a row that looks fine in the Tasks UI and then quietly
+does nothing at 03:00 — this workspace's characteristic failure, and worth one
+more validation to avoid.
+
+This page said `agent_prompt` only until 2026-08-17, and an app built from it
+had its install refused with a message about a field the docs never mentioned.
+`tests/test_docs_match_the_validator.py` now fails if the two drift again.
 
 `enabled` **defaults to `false`**, deliberately: a task that starts firing
 the moment an app is installed is a surprise. The seeded schedule is a
