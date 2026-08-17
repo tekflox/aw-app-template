@@ -46,6 +46,14 @@ there.
 | `privileged` | everything, no isolation | `host:privileged` |
 | `all` | every grant above **except** `privileged` | (each one's) |
 
+`privileged` on a **host** satisfies any narrower app request — it grants every
+device and capability, so refusing an app that asked for `kvm` would make the
+most permissive setting the one under which the app won't install. The app still
+receives only what it declared: ask for `kvm`+`tun` on a `privileged` host and
+the container gets those two devices, not `--privileged`. The host's grant is a
+ceiling, not a floor. The implication is one-way — `all` never satisfies an app
+that explicitly asked for `privileged`.
+
 `all` deliberately excludes `privileged`. "Every device this host can offer"
 and "dissolve the container boundary" are different decisions with very
 different blast radii, and a convenience keyword must not make the second one

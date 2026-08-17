@@ -669,6 +669,9 @@ must not make the second one for you.
 
 Rules worth knowing before you write the manifest:
 
+- **A host granted `privileged` satisfies any narrower request**, and your app
+  still gets only what it declared (`kvm`+`tun` stays `kvm`+`tun`, not
+  `--privileged`). One-way: `all` never satisfies a request for `privileged`.
 - **A missing leg fails the install**, naming the leg and the command that
   fixes it. It does not start a container without the grant: a VM that comes up
   in software emulation reads as "the app is broken", with the real cause
