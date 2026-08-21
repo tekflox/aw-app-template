@@ -19,7 +19,7 @@ async function main() {
   const output = document.getElementById('output');
   const status = document.getElementById('status');
 
-  const { message } = await client.hello();
+  const { message } = await client.template();
   output.textContent = message;
 
   const echo = client.connectEcho({

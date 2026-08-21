@@ -25,30 +25,30 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from template_app import installer  # noqa: E402
 
 
-class HelloInstallerTest(unittest.TestCase):
+class TemplateInstallerTest(unittest.TestCase):
     @patch("template_app.installer.subprocess.run")
-    def test_install_hello_runs_script_at_the_correct_path_with_greeting_env(self, mock_run):
+    def test_install_template_runs_script_at_the_correct_path_with_greeting_env(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="Hello, template!\n", stderr="")
 
-        out = installer.install_hello("Hello")
+        out = installer.install_template("Hello")
 
         self.assertEqual(out, "Hello, template!")
         args, kwargs = mock_run.call_args
-        self.assertEqual(args[0][-1], str(installer.SCRIPTS_DIR / "install_hello.sh"))
-        self.assertEqual(kwargs["env"]["AW_APP_HELLO_GREETING"], "Hello")
+        self.assertEqual(args[0][-1], str(installer.SCRIPTS_DIR / "install_template.sh"))
+        self.assertEqual(kwargs["env"]["AW_APP_TEMPLATE_GREETING"], "Hello")
 
     @patch("template_app.installer.subprocess.run")
-    def test_install_hello_raises_on_failure(self, mock_run):
+    def test_install_template_raises_on_failure(self, mock_run):
         mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="boom")
 
         with self.assertRaises(installer.InstallError):
-            installer.install_hello("Hello")
+            installer.install_template("Hello")
 
     @patch("template_app.installer.subprocess.run")
-    def test_uninstall_hello_runs_uninstall_script(self, mock_run):
+    def test_uninstall_template_runs_uninstall_script(self, mock_run):
         mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
 
-        installer.uninstall_hello()
+        installer.uninstall_template()
 
         args, _ = mock_run.call_args
         self.assertEqual(args[0][-1], str(installer.SCRIPTS_DIR / "uninstall.sh"))

@@ -21,9 +21,9 @@ sys.path.insert(0, str(ROOT))
 from template_app.routes import build_routes  # noqa: E402
 
 
-def test_hello():
+def test_template():
     client = TestClient(build_routes())
-    resp = client.get("/hello")
+    resp = client.get("/template")
     assert resp.status_code == 200
     assert resp.json() == {"message": "Hello from the aw-app-template sub-app"}
 

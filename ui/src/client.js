@@ -4,7 +4,7 @@
 // plugin.js and standalone.js build the same {apiUrl, wsUrl} shape and hand
 // it here; nothing else differs between the two modes.
 //
-//   apiUrl:    (sub) => string        e.g. sub="/hello"   -> ".../api/apps/aw-app-template/hello"
+//   apiUrl:    (sub) => string        e.g. sub="/template"   -> ".../api/apps/aw-app-template/template"
 //   wsUrl:     (sub) => string        e.g. sub="/ws/echo" -> "ws(s)://.../api/apps/aw-app-template/ws/echo"
 //
 // App-owned top-level WebSocket namespaces are reserved at /ws/apps/<slug>/...
@@ -12,9 +12,9 @@
 //   fetchImpl: (path, init) => Promise<Response>   defaults to plain fetch
 
 export function createClient({ apiUrl, wsUrl, fetchImpl = fetch }) {
-  async function hello() {
-    const res = await fetchImpl(apiUrl('/hello'));
-    if (!res.ok) throw new Error(`GET /hello -> ${res.status}`);
+  async function template() {
+    const res = await fetchImpl(apiUrl('/template'));
+    if (!res.ok) throw new Error(`GET /template -> ${res.status}`);
     return res.json();
   }
 
@@ -30,5 +30,5 @@ export function createClient({ apiUrl, wsUrl, fetchImpl = fetch }) {
     };
   }
 
-  return { hello, connectEcho };
+  return { template, connectEcho };
 }

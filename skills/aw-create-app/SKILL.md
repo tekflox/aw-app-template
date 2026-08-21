@@ -14,8 +14,9 @@ description: >-
 
 This skill ships **inside `aw-app-template`** and teaches how to turn this
 repo into a real app. The template is itself a marketplace app (a minimal,
-fully-wired "hello" example). Copy it, rename everything marked `TEMPLATE`/
-`hello`, and follow the contract below.
+fully-wired example named after itself). Copy it, rename everything marked
+`TEMPLATE` and every `template` occurrence to your app's name, and follow the
+contract below.
 
 > **Migration mindset:** most new apps are *ports* of an existing
 > `agentic-workspace` monolith feature — base the app on the working monolith
@@ -85,8 +86,8 @@ that answers none of the reader's actual question.
 This template's own description used to fail that test:
 
 > ~~TEMPLATE — a minimal, fully working decoupled app: installs one trivial
-> CLI (`hello`, …) through the gated commands:install facade, contributes a
-> backend sub-app (GET /hello + app-local WS /ws/echo under the app
+> CLI (`template`, …) through the gated commands:install facade, contributes a
+> backend sub-app (GET /template + app-local WS /ws/echo under the app
 > namespace) and a component-mode frontend bundle, and runs standalone too
 > (ADR Decision 4/6).~~
 
@@ -94,7 +95,7 @@ Every clause is true and none of it is for the reader. What it says now
 leads with what you get:
 
 > TEMPLATE — the fastest way to start a new aw-workspace app. Install it and
-> you have a working app on day one: a `hello` CLI that prints a
+> you have a working app on day one: a `template` CLI that prints a
 > configurable greeting, its own window, and an HTTP + WebSocket backend …
 
 Rule of thumb: if a sentence would only make sense to someone who has read
@@ -224,8 +225,8 @@ sync.
     ]
   }
   ```
-- **`system_clis`** — `[{ "name": "hello", "installer": "scripts/install_hello.sh",
-  "verify": "hello --version" }]` (needs `commands:install`).
+- **`system_clis`** — `[{ "name": "template", "installer": "scripts/install_template.sh",
+  "verify": "template --version" }]` (needs `commands:install`).
   See §6b — **installers have a contract, and getting it wrong fails silently.**
 - **`db`** — app-owned tables (needs `db:own-tables`).
 - **`frontend`** — a JS bundle mounted into granted slots (needs `ui:code`;
@@ -450,8 +451,8 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 def build_routes() -> FastAPI:
     app = FastAPI(title="myapp")
 
-    @app.get("/hello")
-    async def hello():
+    @app.get("/template")
+    async def template():
         return {"message": "hi"}
 
     @app.websocket("/ws/echo")           # app-local WS; externally stays app-namespaced
@@ -494,7 +495,7 @@ export function register(host) {
   function MyPill() {
     const [msg, setMsg] = host.React.useState('…');
     host.React.useEffect(() => {
-      host.sdk.api.fetch('/api/apps/myapp/hello')
+      host.sdk.api.fetch('/api/apps/myapp/template')
         .then((r) => r.json()).then((d) => setMsg(d.message));
     }, []);
     return host.h('span', {}, msg);
@@ -513,8 +514,8 @@ install listeners) without registering any slot, as long as every teardown
 goes through `host.onDispose(fn)`. This is the sanctioned pattern for a
 client that has no UI of its own to show (e.g. a future devctl client).
 
-`host.app.{apiUrl,fetch,wsUrl}` scoped helpers (`app.apiUrl('/hello')` →
-`/api/apps/<id>/hello`, no hand-built prefix) are **proposed in ADR Decision
+`host.app.{apiUrl,fetch,wsUrl}` scoped helpers (`app.apiUrl('/template')` →
+`/api/apps/<id>/template`, no hand-built prefix) are **proposed in ADR Decision
 3 but not yet landed** in aw-frontend's `pluginHost.js` — until then, build
 the `/api/apps/<id>/...` prefix yourself (see `ui/src/plugin.js` in this
 repo) and use `host.sdk.api.fetch`/`host.sdk.api.wsUrl` for the actual
@@ -821,8 +822,8 @@ needs touching.
 
 ## 11. Reference apps (read these before building)
 
-- `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `hello`
-  CLI) + `routes:register`/`ui:code` (a `/hello` + `/ws/echo` sub-app, a
+- `aw-app-template` (this repo) — Tier-1 + `commands:install` (the `template`
+  CLI) + `routes:register`/`ui:code` (a `/template` + `/ws/echo` sub-app, a
   `core.nav` slot component — shipped commented out, so the template itself
   renders nothing in the nav; uncomment it in your app — and standalone
   mode — §5–§7 above).

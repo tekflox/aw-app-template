@@ -42,7 +42,7 @@ export function register(host) {
   // function TemplateNavPill() {
   //   const [status, setStatus] = host.React.useState('…');
   //   host.React.useEffect(() => {
-  //     client.hello()
+  //     client.template()
   //       .then((r) => setStatus(r.message))
   //       .catch((e) => setStatus(`error: ${e.message}`));
   //   }, []);

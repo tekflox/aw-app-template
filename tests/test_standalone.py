@@ -21,7 +21,7 @@ from template_app.__main__ import build_standalone_app, SLUG, UI_DIST  # noqa: E
 
 def test_standalone_app_boots_and_mounts_api():
     client = TestClient(build_standalone_app())
-    resp = client.get(f"/api/apps/{SLUG}/hello")
+    resp = client.get(f"/api/apps/{SLUG}/template")
     assert resp.status_code == 200
     assert resp.json()["message"]
 

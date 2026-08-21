@@ -1,6 +1,6 @@
 """
 Entrypoint referenced by aw-app.json's runtime.entrypoint
-("template_app.plugin:HelloAppPlugin").
+("template_app.plugin:TemplateAppPlugin").
 
 Plugs into the real F4 framework runtime: activate(ctx) (1) installs each
 declared system CLI THROUGH the gated ``ctx.commands`` facade (capability
@@ -41,13 +41,13 @@ from . import routes as routes_mod
 log = logging.getLogger("aw_apps.app_template")
 
 
-class HelloAppPlugin:
+class TemplateAppPlugin:
     async def activate(self, ctx) -> None:
         with open(os.path.join(ctx.package_dir, "aw-app.json"), encoding="utf-8") as f:
             manifest = json.load(f)
 
         greeting = (getattr(ctx, "config", {}) or {}).get("greeting") or "Hello"
-        os.environ["AW_APP_HELLO_GREETING"] = str(greeting)
+        os.environ["AW_APP_TEMPLATE_GREETING"] = str(greeting)
 
         clis = manifest.get("contributes", {}).get("system_clis", [])
         installed = []

@@ -14,8 +14,8 @@ docs/knowledge_base/docs/architecture/adr-app-front-back-routes-dual-mode.md).
 Keep every path here RELATIVE (no ``/api/apps/<slug>`` prefix) so client
 code and docs use one path shape in both modes:
 
-    integrated: /api/apps/aw-app-template/hello        /api/apps/aw-app-template/ws/echo
-    standalone: /api/apps/aw-app-template/hello        /api/apps/aw-app-template/ws/echo
+    integrated: /api/apps/aw-app-template/template     /api/apps/aw-app-template/ws/echo
+    standalone: /api/apps/aw-app-template/template     /api/apps/aw-app-template/ws/echo
 
 Integrated in-process WS path shape (Decision 2):
 ``/api/apps/<slug>/ws/<name>`` — this sub-app declares
@@ -50,8 +50,8 @@ def build_routes() -> FastAPI:
     __main__.py both call it exactly once)."""
     app = FastAPI(title="template")
 
-    @app.get("/hello")
-    async def hello() -> dict:
+    @app.get("/template")
+    async def template() -> dict:
         return {"message": "Hello from the aw-app-template sub-app"}
 
     @app.websocket("/ws/echo")

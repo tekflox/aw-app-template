@@ -1,8 +1,8 @@
 """
-Install/uninstall logic for the `hello` CLI, as a plain subprocess-calling
+Install/uninstall logic for the `template` CLI, as a plain subprocess-calling
 module (no framework `ctx` needed) — used by tests/test_installer.py
 (subprocess mocked) and by tests/standalone_test.sh (real, out-of-framework).
-HelloAppPlugin.activate() goes through ctx.commands.install_system_cli()
+TemplateAppPlugin.activate() goes through ctx.commands.install_system_cli()
 instead (the gated/journaled framework path); this module exists purely so
 the install logic is testable in plain CI without spinning up the runtime.
 
@@ -46,9 +46,9 @@ def _run_script(script: str, *, env_overrides: dict[str, str] | None = None) -> 
     return result.stdout.strip()
 
 
-def install_hello(greeting: str = "Hello") -> str:
-    return _run_script("install_hello.sh", env_overrides={"AW_APP_HELLO_GREETING": greeting})
+def install_template(greeting: str = "Hello") -> str:
+    return _run_script("install_template.sh", env_overrides={"AW_APP_TEMPLATE_GREETING": greeting})
 
 
-def uninstall_hello() -> None:
+def uninstall_template() -> None:
     _run_script("uninstall.sh")

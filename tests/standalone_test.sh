@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Standalone test — no framework runtime required. Run this INSIDE the
-# aw-workspace container to prove install_hello.sh actually installs `hello`
+# aw-workspace container to prove install_template.sh actually installs `template`
 # and that it resolves + prints the configured greeting after.
 #
 # TEMPLATE: this is the pattern — install, check `which`, check output,
@@ -13,20 +13,20 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-export AW_APP_HELLO_GREETING="${AW_APP_HELLO_GREETING:-Hello}"
+export AW_APP_TEMPLATE_GREETING="${AW_APP_TEMPLATE_GREETING:-Hello}"
 AW_BIN_DIR="${AW_WORKSPACE_HOME:-$HOME/.aw-workspace}/bin"
 
-echo "== install_hello.sh (greeting=$AW_APP_HELLO_GREETING) =="
-bash scripts/install_hello.sh
+echo "== install_template.sh (greeting=$AW_APP_TEMPLATE_GREETING) =="
+bash scripts/install_template.sh
 
 echo "== resolution check (bin dir: $AW_BIN_DIR) =="
 export PATH="$AW_BIN_DIR:$PATH"
-which hello
+which template
 
 echo "== output =="
-hello template
+template template
 
 echo "== idempotency re-run =="
-bash scripts/install_hello.sh
+bash scripts/install_template.sh
 
-echo "OK: hello installed and resolves"
+echo "OK: template installed and resolves"

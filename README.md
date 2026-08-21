@@ -9,9 +9,9 @@ skeleton: manifest, plugin, tests, and a CI/CD pipeline wired to the
 fix that's landed on that pipeline so far (test-gating before release,
 correct permissions ceiling, auto-merge).
 
-It's a real, working app — not just files. `aw-app-template` installs one trivial `hello` CLI
+It's a real, working app — not just files. `aw-app-template` installs one trivial `template` CLI
 that prints a configurable greeting, contributes a tiny backend sub-app
-(`GET /hello` + `WS /ws/echo` inside the app mount) and a frontend bundle (with a
+(`GET /template` + `WS /ws/echo` inside the app mount) and a frontend bundle (with a
 `core.nav` slot component written out but commented out — see `ui/src/plugin.js`
 — so the template adds no stray pill to a real workspace's nav), and runs
 standalone too (`python -m template_app`) — so cloning this template and
@@ -31,8 +31,10 @@ gh repo create tekflox/aw-app-<yourapp> --template tekflox/aw-app-template --pub
 git clone https://github.com/tekflox/aw-app-<yourapp>
 ```
 
-Then rename everything marked **TEMPLATE** in comments and every `aw-app-template`/`hello`/
-`template_app` occurrence:
+Then rename everything marked **TEMPLATE** in comments and every
+`aw-app-template`/`template`/`template_app` occurrence — the scaffold names
+its app, its CLI, its route and its Python package after itself, so replacing
+"template" with your app's name everywhere is the whole rename:
 
 1. **`aw-app.json`** — `id`, `name`, `description`, `runtime.entrypoint`,
    `contributes.system_clis`, `config_schema` (or delete it if your app has
@@ -46,7 +48,7 @@ Then rename everything marked **TEMPLATE** in comments and every `aw-app-templat
 2. **`template_app/`** — rename the directory + the class in `plugin.py`
    (and update `runtime.entrypoint` in `aw-app.json` to match). Keep,
    change, or delete each piece independently — they're not all-or-nothing:
-   - `installer.py` / `scripts/` — the `hello` CLI install pattern
+   - `installer.py` / `scripts/` — the `template` CLI install pattern
      (`commands:install`). Delete if your app has no CLI.
    - `routes.py` / `plugin.py`'s `ctx.routes.register(...)` — the backend
      sub-app pattern (`routes:register`, GET + WS). Delete if your app has
@@ -63,7 +65,7 @@ Then rename everything marked **TEMPLATE** in comments and every `aw-app-templat
        container.
      - `aw-app-browser` — `tier: container` (Tier-2, a sidecar container
        instead of in-process Python).
-3. **`scripts/`** — replace `install_hello.sh` with your app's real
+3. **`scripts/`** — replace `install_template.sh` with your app's real
    installer(s) (one script per CLI is the convention, but a single script
    installing several related tools — like `aw-app-essentials`'s Node.js
    toolkit — is fine too). Keep `uninstall.sh` in sync — it's the one
@@ -102,11 +104,11 @@ by hand.
   core's `src/apps/capabilities.py`) and the validator finds it in a sibling
   checkout. 28 repos used to each freeze their own copy; they drifted into 11
   versions, so a green local run said nothing about the release.
-- `scripts/install_hello.sh` — installs a trivial `hello` command into the
+- `scripts/install_template.sh` — installs a trivial `template` command into the
   workspace's persistent bin dir (`~/.aw-workspace/bin`, on PATH, survives
   restarts). Idempotent.
 - `scripts/uninstall.sh` — reverses it.
-- `template_app/plugin.py` — `HelloAppPlugin` entrypoint; `activate(ctx)`
+- `template_app/plugin.py` — `TemplateAppPlugin` entrypoint; `activate(ctx)`
   installs the CLI via the gated `ctx.commands` facade (capability
   `commands:install`) so it's journaled and the framework reverts it on
   uninstall, and registers `routes.py`'s sub-app via `ctx.routes` (capability
@@ -115,7 +117,7 @@ by hand.
   subprocess-calling module (no framework `ctx` needed) — used by the tests
   below.
 - `template_app/routes.py` — `build_routes() -> FastAPI`, the mode-agnostic
-  backend sub-app (`GET /hello`, `WS /ws/echo` inside the app mount) shared by integrated mode
+  backend sub-app (`GET /template`, `WS /ws/echo` inside the app mount) shared by integrated mode
   (`plugin.py`) and standalone mode (`__main__.py`) — ADR Decision 2/4/6.
 - `template_app/__main__.py` — standalone entrypoint (`python -m
   template_app`): mounts `routes.py`'s sub-app at the same `/api/apps/aw-app-template`
@@ -135,7 +137,7 @@ by hand.
 - `tests/test_installer.py` — unit tests (subprocess mocked, no real
   installs) — runs in CI on every push, gating the release.
 - `tests/test_routes.py` — `TestClient` coverage of `routes.py`'s sub-app
-  (GET `/hello`, WS `/ws/echo`) — runs in CI.
+  (GET `/template`, WS `/ws/echo`) — runs in CI.
 - `external-client/app-api-client.js` — generic, dependency-free helper for
   calling your app's API from an external client (browser extension, mobile
   app); see "Calling your app's API from an external client" below.
@@ -186,7 +188,7 @@ When adding a top-level WebSocket route or Caddy/edge mapping for an app, use
 `/ws/apps/<slug>/...`, never `/ws/...`.
 - `tests/test_standalone.py` — boots `__main__.py`'s standalone app and hits
   the mounted API (plus the static UI mount, once `ui/` is built) — runs in CI.
-- `tests/standalone_test.sh` — installs `hello` for real and checks
+- `tests/standalone_test.sh` — installs `template` for real and checks
   resolution + output; run inside the aw-workspace container (not part of
   CI — needs the real target environment).
 
