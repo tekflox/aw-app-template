@@ -38,6 +38,10 @@ Two tiers:
   image, spawned over the host podman socket and reverse-proxied. Use when the
   app needs its own runtime/binaries (e.g. a browser). Needs
   `permissions: ["containers:manage"]` and `runtime.image/port/run_flags_needed`.
+  Non-HTTP listeners are declared with `runtime.publish`, for example SIP
+  `{"container":5060,"host":5060,"protocol":"udp"}` or an equal-sized RTP
+  range using `"10000-10100"`. The normal `runtime.port` remains the single
+  HTTP port used by the authenticated reverse proxy.
 
 ## 2. The manifest (`aw-app.json`)
 
