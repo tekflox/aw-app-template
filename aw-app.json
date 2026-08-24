@@ -2,7 +2,7 @@
   "manifest_version": 1,
   "id": "aw-app-template",
   "name": "App Template",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "TEMPLATE \u2014 the fastest way to start a new aw-workspace app. Install it and you have a working app on day one: a `template` CLI that prints a configurable greeting, its own window in the Apps grid, and an HTTP + WebSocket backend \u2014 with tests and marketplace release already wired. The scaffold names its app, CLI, route and Python package after itself, so renaming every `template` occurrence to your app's name is the whole rename; see README.md.",
   "tier": "inprocess",
   "requires_ui_refresh": true,
