@@ -31,7 +31,19 @@ export function createClient({ apiUrl, wsUrl, fetchImpl = fetch }) {
   function connectEcho({ onOpen, onMessage, onClose } = {}) {
     const ws = new WebSocket(wsUrl('/ws/echo'));
     if (onOpen) ws.addEventListener('open', onOpen);
-    if (onMessage) ws.addEventListener('message', (ev) => onMessage(JSON.parse(ev.data)));
+    if (onMessage) {
+      ws.addEventListener('message', (ev) => {
+        // /ws/echo never sends non-JSON, but a reader copying this file into
+        // a socket that mixes binary frames (aw-ws/1 §4.5) needs the guard.
+        let envelope;
+        try {
+          envelope = JSON.parse(ev.data);
+        } catch {
+          return;
+        }
+        onMessage(envelope);
+      });
+    }
     if (onClose) ws.addEventListener('close', onClose);
     let nextId = 0;
     return {
