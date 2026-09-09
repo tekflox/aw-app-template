@@ -138,6 +138,11 @@ by hand.
   installs) — runs in CI on every push, gating the release.
 - `tests/test_routes.py` — `TestClient` coverage of `routes.py`'s sub-app
   (GET `/template`, WS `/ws/echo`) — runs in CI.
+- `tests/test_plugin.py` — `TemplateAppPlugin.activate()`/`deactivate()` against
+  a lightweight `ctx` double (no real F4 runtime needed) — runs in CI.
+- `tests/test_main.py` — `__main__.py`'s standalone-mode `main()` (the
+  "ui/dist not built yet" note, `PORT`/`AW_APP_HOST` env overrides),
+  `uvicorn.run` mocked — runs in CI.
 - `external-client/app-api-client.js` — generic, dependency-free helper for
   calling your app's API from an external client (browser extension, mobile
   app); see "Calling your app's API from an external client" below.
@@ -257,6 +262,19 @@ bump, tag, or marketplace catalog sync happens. See that repo's
 `apps.json` automatically (name/description/publisher/resource_estimate —
 `has_config`/`bootstrap`/`icon`/`tags`/`category` are set once by hand on
 first listing and not auto-synced afterward).
+
+**Coverage gate — `.github/workflows/test.yml`, blocking, on every push and
+PR.** `pytest --cov=template_app` against `pyproject.toml`'s
+`[tool.coverage.report] fail_under = 80`, a hard floor (not the estate's
+per-repo baseline+ratchet default in `docs/standards/pipeline-testing.md`
+§4.2 — this template is what every new `aw-app-*` is born from, and §4.2
+already starts a brand-new repo at 80%). This gate lives here rather than in
+`app-release.yml` because the shared workflow doesn't have a coverage step
+yet (that's a separate, later change to `aw-marketplace`); until it does,
+copying this template inherits the local gate too. Keep whatever module you
+add above 80% covered, or `fail_under` will fail the build — it may only be
+raised, never lowered (a lower value needs a written reason in the commit
+message).
 
 ## Contributing a skill (`contributes.skills`)
 
