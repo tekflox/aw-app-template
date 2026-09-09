@@ -58,7 +58,7 @@ export function register(host) {
   // needs. Shown here for reference; safe to delete if you have no headless
   // work to do.
   const echo = client.connectEcho({
-    onMessage: (msg) => console.debug(`[${SLUG}] echo:`, msg),
+    onMessage: (envelope) => console.debug(`[${SLUG}] ws:`, envelope.type, envelope.data),
   });
   host.onDispose(() => echo.close());
 }

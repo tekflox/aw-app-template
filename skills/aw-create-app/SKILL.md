@@ -462,14 +462,22 @@ def build_routes() -> FastAPI:
     @app.websocket("/ws/echo")           # app-local WS; externally stays app-namespaced
     async def ws_echo(ws: WebSocket):
         await ws.accept()
+        await ws.send_json({"type": "myapp_init", "data": {"protocol": 1}})
         try:
             while True:
-                await ws.send_text(await ws.receive_text())
+                await ws.receive_text()  # parse + validate the aw-ws/1 envelope, then reply in kind
         except WebSocketDisconnect:
             pass
 
     return app
 ```
+
+Every frame in or out is the `aw-ws/1` envelope (`{type, data, id?, re?}`),
+not a bare string — see `template_app/routes.py`'s `/ws/echo` for the full
+reference handler (init frame, echo, malformed-frame `error`, ignore
+unknown `type`) and
+`docs/standards/app-backend-websocket-messaging.md` in the aw-workspace repo
+for the standard itself.
 
 Register it in `plugin.py`'s `activate(ctx)` via the gated facade:
 `ctx.routes.register(build_routes())` — the runtime mounts it at

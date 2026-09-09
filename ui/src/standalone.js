@@ -24,12 +24,14 @@ async function main() {
 
   const echo = client.connectEcho({
     onOpen: () => { status.textContent = 'ws: connected'; },
-    onMessage: (msg) => { status.textContent = `ws: echo -> ${msg}`; },
+    onMessage: (envelope) => {
+      status.textContent = `ws: ${envelope.type} -> ${JSON.stringify(envelope.data)}`;
+    },
     onClose: () => { status.textContent = 'ws: closed'; },
   });
 
   document.getElementById('ping').addEventListener('click', () => {
-    echo.send(`ping ${Date.now()}`);
+    echo.send({ text: `ping ${Date.now()}` });
   });
 }
 

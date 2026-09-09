@@ -1,31 +1,33 @@
-function d({ apiUrl: c, wsUrl: r, fetchImpl: s = fetch }) {
+function f({ apiUrl: s, wsUrl: r, fetchImpl: a = fetch }) {
   async function e() {
-    const t = await s(c("/template"));
+    const t = await a(s("/template"));
     if (!t.ok) throw new Error(`GET /template -> ${t.status}`);
     return t.json();
   }
-  function a({ onOpen: t, onMessage: p, onClose: l } = {}) {
+  function c({ onOpen: t, onMessage: p, onClose: l } = {}) {
     const n = new WebSocket(r("/ws/echo"));
-    return t && n.addEventListener("open", t), p && n.addEventListener("message", (o) => p(o.data)), l && n.addEventListener("close", l), {
-      send: (o) => n.send(o),
+    t && n.addEventListener("open", t), p && n.addEventListener("message", (i) => p(JSON.parse(i.data))), l && n.addEventListener("close", l);
+    let d = 0;
+    return {
+      send: (i) => n.send(JSON.stringify({ type: "aw_app_template_echo", data: i, id: String(d++) })),
       close: () => n.close(),
       raw: n
     };
   }
-  return { template: e, connectEcho: a };
+  return { template: e, connectEcho: c };
 }
-const i = "aw-app-template";
-function f(c) {
-  const s = d({
-    apiUrl: (e) => `/api/apps/${i}${e}`,
-    wsUrl: (e) => c.sdk.api.wsUrl(`/api/apps/${i}${e}`),
-    fetchImpl: (e, a) => c.sdk.api.fetch(e, a)
+const o = "aw-app-template";
+function w(s) {
+  const a = f({
+    apiUrl: (e) => `/api/apps/${o}${e}`,
+    wsUrl: (e) => s.sdk.api.wsUrl(`/api/apps/${o}${e}`),
+    fetchImpl: (e, c) => s.sdk.api.fetch(e, c)
   }).connectEcho({
-    onMessage: (e) => console.debug(`[${i}] echo:`, e)
+    onMessage: (e) => console.debug(`[${o}] ws:`, e.type, e.data)
   });
-  c.onDispose(() => s.close());
+  s.onDispose(() => a.close());
 }
 export {
-  f as default,
-  f as register
+  w as default,
+  w as register
 };
