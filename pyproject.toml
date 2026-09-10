@@ -18,10 +18,17 @@ exclude_lines = [
 ]
 show_missing = true
 precision = 1
-# Hard 80% gate, not the estate's baseline+ratchet default (§4.2) — explicit
+# Hard 100% gate, not the estate's baseline+ratchet default (§4.2) — explicit
 # request from Frederico for the template specifically, since it is the
-# reference every new aw-app-* is born from and §4.2 point 5 already starts
-# every NEW app at 80%. Measured baseline at adoption (2026-09-09) was 74%
-# (template_app/plugin.py at 0%); new tests in tests/test_plugin.py and
-# tests/test_main.py brought it to 99%. May only rise from here.
-fail_under = 80
+# reference every new aw-app-* is born from and is meant to be the quality
+# bar other aw-app-* repos are measured against (card
+# 3d75bf3b-9510-8172-a929-c1fe4e60254c). Measured baseline at adoption
+# (2026-09-09) was 74% (template_app/plugin.py at 0%); the 80%-gate sibling
+# card (3d65bf3b-9510-818c-93ff-ef6bd0740446) brought it to a measured 100%
+# (tests/test_plugin.py, tests/test_main.py — real behavior asserted, not
+# import-only stubs) with no remaining line that isn't covered by either a
+# real test or one of the exclude_lines exemptions above. The gate was still
+# pinned at 80 even though the measured number was already 100 — raising it
+# here just makes the gate match reality and locks in the ratchet: never
+# lower this without a documented reason.
+fail_under = 100

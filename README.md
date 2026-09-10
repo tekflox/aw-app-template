@@ -265,16 +265,32 @@ first listing and not auto-synced afterward).
 
 **Coverage gate — `.github/workflows/test.yml`, blocking, on every push and
 PR.** `pytest --cov=template_app` against `pyproject.toml`'s
-`[tool.coverage.report] fail_under = 80`, a hard floor (not the estate's
+`[tool.coverage.report] fail_under = 100`, a hard floor (not the estate's
 per-repo baseline+ratchet default in `docs/standards/pipeline-testing.md`
-§4.2 — this template is what every new `aw-app-*` is born from, and §4.2
-already starts a brand-new repo at 80%). This gate lives here rather than in
-`app-release.yml` because the shared workflow doesn't have a coverage step
-yet (that's a separate, later change to `aw-marketplace`); until it does,
-copying this template inherits the local gate too. Keep whatever module you
-add above 80% covered, or `fail_under` will fail the build — it may only be
-raised, never lowered (a lower value needs a written reason in the commit
-message).
+§4.2 — this template is what every new `aw-app-*` is born from and is meant
+to be the quality bar the rest of the estate is measured against, so it
+holds itself to actual 100%, not just the §4.2 new-repo floor of 80%).
+Lines that are genuinely impractical to exercise (glue, dunder reprs,
+`__main__` guards) are excluded explicitly via `[tool.coverage.report]
+exclude_lines`, not left as a silent gap — add a new exclusion there (with a
+reason) rather than letting real, reachable code go untested. This gate
+lives here rather than in `app-release.yml` because the shared workflow
+doesn't have a coverage step yet (that's a separate, later change to
+`aw-marketplace`); until it does, copying this template inherits the local
+gate too. Keep whatever module you add fully covered, or `fail_under` will
+fail the build — it may only be raised, never lowered (a lower value needs
+a written reason in the commit message).
+
+**Downloadable coverage report.** The same CI step that enforces the gate
+also emits an HTML report (`coverage html` → `htmlcov/`) and a
+`coverage.xml`, and `.github/workflows/test.yml` publishes both as a
+`coverage-report` artifact via `actions/upload-artifact` (uploaded even when
+the gate fails, so a red run still explains itself). To read it: open the
+run under this repo's **Actions** tab → the `coverage` job's **Summary**
+page → **Artifacts** → download `coverage-report.zip` → unzip and open
+`htmlcov/index.html` in a browser for the line-by-line view, or feed
+`coverage.xml` to another tool (Cobertura format) — no local `pytest` run
+needed just to see what's covered.
 
 ## Contributing a skill (`contributes.skills`)
 
