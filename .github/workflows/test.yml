@@ -24,8 +24,8 @@ jobs:
   coverage:
     runs-on: [self-hosted, aw-baremetal]
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: Install deps
@@ -41,7 +41,7 @@ jobs:
       # bypassing the fallback altogether. Found by the aw-app-kb pilot of
       # this same standard (card 3d65bf3b-9510-8173-b347-d834e37aeedf) —
       # applying the fix directly instead of rediscovering it in CI here.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           repository: tekflox/aw-marketplace
           path: .aw-marketplace-schema
@@ -62,7 +62,7 @@ jobs:
         # local pytest run needed to see what's covered. if: always() so a
         # failing coverage gate still publishes the report that explains why.
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: coverage-report
           path: |

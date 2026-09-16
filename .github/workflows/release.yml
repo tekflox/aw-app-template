@@ -24,4 +24,5 @@ jobs:
     uses: tekflox/aw-marketplace/.github/workflows/app-release.yml@master
     with:
       bump: ${{ inputs.bump || '' }}
-    secrets: inherit
+    secrets:
+      MARKETPLACE_SYNC_TOKEN: ${{ secrets.MARKETPLACE_SYNC_TOKEN }}
