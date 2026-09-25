@@ -11,6 +11,11 @@ name: Security scan
 # upload — no extra infra. This job intentionally does not fail the build on
 # findings (continue-on-error on each scan step): it is a report-only pilot,
 # not a merge gate.
+#
+# All three jobs derive runs-on from the repo owner (see test.yml's comment for
+# the full reasoning): the self-hosted runners belong to an org runner group
+# that a personal-account repo can never join, where these jobs would queue
+# forever rather than fail.
 
 on:
   schedule:
@@ -23,7 +28,7 @@ permissions:
 
 jobs:
   semgrep:
-    runs-on: [self-hosted, aw-baremetal]
+    runs-on: ${{ fromJSON(startsWith(github.repository, 'tekflox/') && '["self-hosted","aw-baremetal"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -44,7 +49,7 @@ jobs:
           category: semgrep
 
   trivy:
-    runs-on: [self-hosted, aw-baremetal]
+    runs-on: ${{ fromJSON(startsWith(github.repository, 'tekflox/') && '["self-hosted","aw-baremetal"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Run Trivy (SCA + secrets + IaC/Dockerfile misconfig)
@@ -64,7 +69,7 @@ jobs:
           category: trivy
 
   gitleaks:
-    runs-on: [self-hosted, aw-baremetal]
+    runs-on: ${{ fromJSON(startsWith(github.repository, 'tekflox/') && '["self-hosted","aw-baremetal"]' || '"ubuntu-latest"') }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:

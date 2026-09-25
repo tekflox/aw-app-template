@@ -85,7 +85,14 @@ its app, its CLI, its route and its Python package after itself, so replacing
    `tekflox/aw-marketplace`'s shared `app-release.yml`, which runs
    `tests/validate_manifest.py` + `tests/test_*.py` on every push to
    `master` — a failing test stops the release before any version bump,
-   tag, or marketplace catalog write happens.
+   tag, or marketplace catalog write happens. **If your repo is NOT under
+   the `tekflox` org** (e.g. it lives on your personal account), the
+   workflows still need no edit — `runs-on` is derived from the repo owner
+   in all three of `release.yml` (via the called workflow), `test.yml` and
+   `security-scan.yml` — but you must add `MARKETPLACE_SYNC_TOKEN` as a
+   **repo-level** secret on your repo before the release can complete. See
+   [CI/CD](#cicd) for the token shape and what a first push looks like
+   until it exists.
 7. **`README.md`** — replace this file with your app's own (what it
    installs, how it's configured, what's been tested where).
 
@@ -262,6 +269,42 @@ bump, tag, or marketplace catalog sync happens. See that repo's
 `apps.json` automatically (name/description/publisher/resource_estimate —
 `has_config`/`bootstrap`/`icon`/`tags`/`category` are set once by hand on
 first listing and not auto-synced afterward).
+
+**If your app repo is not under the `tekflox` org.** Everything above still
+applies, and no workflow file needs editing — but two things differ, and one
+of them needs a human once:
+
+- **Runners are derived, not configured.** `release.yml` (through the called
+  `app-release.yml`), `test.yml` and `security-scan.yml` all resolve
+  `runs-on` from `startsWith(github.repository, 'tekflox/')`: inside the org
+  you get the `[self-hosted, aw-baremetal]` pair, outside it you get
+  `ubuntu-latest`. This is not a preference. An org runner group can only be
+  shared with repos *in* that org, so a job aimed at those runners from a
+  personal-account repo **queues forever instead of failing** — exactly how
+  `aw-app-uc-phd`'s catalog entry stayed frozen at `v0.1.1` while its repo
+  reached `v0.6.0`. There is no runner input to pass.
+- **`MARKETPLACE_SYNC_TOKEN` must be a repo secret, and it is yours to
+  create.** Outside the org there are no org secrets to inherit, so add it
+  under *Settings → Secrets and variables → Actions → New repository
+  secret*. The smallest safe shape is a **fine-grained PAT** scoped to
+  `tekflox/aw-marketplace` (Contents: write, Pull requests: write) plus your
+  own app repo (Contents: write) — not a full-scope `admin:org` /
+  `delete_repo` PAT. Until it exists, your first push to `master` gives a
+  **red** run that fails on `app-release.yml`'s first step and names the repo
+  and the secret. That is intended: a red, self-explaining run is the point,
+  where an eternally-queued one hides.
+- **Your catalog sync PR will not auto-merge.** The auto-merge step in
+  `app-release.yml` is gated on `startsWith(github.repository, 'tekflox/')`,
+  so a non-org app's `sync/<id>` PR opens and waits for a human. For a
+  catalog every workspace reads, a human gate on a non-org contributor is
+  correct — **don't try to defeat it**. Ping whoever maintains
+  `tekflox/aw-marketplace` to merge it.
+
+One caveat worth knowing: every step in the shared release job is network +
+Python today, which is why `ubuntu-latest` is sufficient. If a future step
+ever needs the bare-metal host (a Docker build against a local registry,
+workspace-local state), it will work for `tekflox/*` apps and fail only for
+personally-owned ones.
 
 **Coverage gate — `.github/workflows/test.yml`, blocking, on every push and
 PR.** `pytest --cov=template_app` against `pyproject.toml`'s
