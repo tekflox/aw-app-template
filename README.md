@@ -357,3 +357,31 @@ it under `contributes.skills`. On install, aw-workspace's runtime symlinks the
 skill's own directory into a shared workspace skills index (no content
 duplication) and lists it at `GET /api/apps/-/skills`; uninstall removes the
 symlink. See `repos/aw-workspace/src/apps/skills.py`.
+
+## Contributing knowledge (`contributes.knowledge`)
+
+This app also ships a **docs** contribution — `docs/`, declared in the
+manifest:
+
+```jsonc
+"contributes": {
+  "knowledge": { "path": "docs" }
+}
+```
+
+On install (and on every boot, since activation re-runs), aw-workspace
+**copies** `docs/` into `.aw-workspace/knowledge_base/apps/<app-id>/docs/`,
+where it becomes searchable by any agent via `search_knowledge_base` — same
+mechanism and same tree every other app's mirrored docs land in, namespaced
+by app id so nothing collides. **It disappears when the app is
+uninstalled** — the mirror is not this repo's docs, it's a copy owned by
+the install, and it is purged along with everything else the install owned.
+
+`docs/README.md` is a **placeholder skeleton**, not a worked example — it
+ships with obviously-TODO prose under two headings (why does this app
+exist, what does it do) plus a CLI-commands section, so every app born from
+this template starts with *something* searchable instead of nothing, and so
+that something is unmistakably unfinished if you forget to replace it.
+Write your app's real answer before your first real release — even an app
+with little to say should clear the "why does this exist / what does it
+do" bar. Delete the CLI-commands section entirely if your app ships no CLI.
