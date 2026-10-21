@@ -28,6 +28,20 @@ def test_template():
     assert resp.json() == {"message": "Hello from the aw-app-template sub-app"}
 
 
+def test_reference_event_uses_workspace_notifier():
+    emitted = []
+    client = TestClient(build_routes(lambda event, data: emitted.append((event, data))))
+    resp = client.post("/events/reference")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True, "event": "reference_open"}
+    assert emitted == [("reference_open", {"source": "aw-app-template"})]
+
+
+def test_reference_event_is_explicitly_unavailable_in_standalone_mode():
+    resp = TestClient(build_routes()).post("/events/reference")
+    assert resp.status_code == 503
+
+
 def test_ws_echo_sends_aw_ws_1_init_frame_first():
     client = TestClient(build_routes())
     with client.websocket_connect("/ws/echo") as ws:

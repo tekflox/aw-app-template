@@ -93,7 +93,9 @@ from __future__ import annotations
 
 import json
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from collections.abc import Callable
+
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 
 # aw-app.json's "id" ("aw-app-template") with "-" -> "_" (aw-ws/1 §4.1) —
 # mechanical, see the module docstring; do not rename this to look tidier.
@@ -106,7 +108,7 @@ def _error(code: str, message: str) -> dict:
     return {"type": "error", "data": {"code": code, "message": message}}
 
 
-def build_routes() -> FastAPI:
+def build_routes(notify_event: Callable[[str, dict], None] | None = None) -> FastAPI:
     """Mode-agnostic factory — call this fresh for each mode (plugin.py /
     __main__.py both call it exactly once)."""
     app = FastAPI(title="template")
@@ -114,6 +116,18 @@ def build_routes() -> FastAPI:
     @app.get("/template")
     async def template() -> dict:
         return {"message": "Hello from the aw-app-template sub-app"}
+
+    @app.post("/events/reference")
+    async def reference_event() -> dict:
+        """Live reference for manifest-driven shell hooks.
+
+        Standalone mode has no workspace notification transport, so it fails
+        explicitly instead of pretending the event was delivered.
+        """
+        if notify_event is None:
+            raise HTTPException(status_code=503, detail="workspace event transport unavailable")
+        notify_event("reference_open", {"source": "aw-app-template"})
+        return {"ok": True, "event": "reference_open"}
 
     @app.websocket("/ws/echo")
     async def ws_echo(ws: WebSocket) -> None:

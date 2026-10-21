@@ -26,7 +26,8 @@
     "fs:workspace-data",
     "routes:register",
     "ui:code",
-    "ui:slots:core.nav"
+    "ui:slots:core.nav",
+    "notifications:send"
   ],
   "contributes": {
     "system_clis": [
@@ -39,6 +40,26 @@
     "routes": [
       {
         "prefix": "/api/apps/aw-app-template"
+      }
+    ],
+    "windows": [
+      {
+        "id": "aw-app-template.reference",
+        "title": "App Event Reference",
+        "body": {
+          "type": "managed_app",
+          "app_id": "aw-app-template",
+          "url": "/api/apps/aw-app-template/template"
+        }
+      }
+    ],
+    "event_hooks": [
+      {
+        "event": "reference_open",
+        "action": {
+          "type": "open_window",
+          "window": "aw-app-template.reference"
+        }
       }
     ],
     "frontend": {
