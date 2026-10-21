@@ -64,7 +64,7 @@ class TemplateAppPlugin:
             )
             installed.append(cli["name"])
 
-        ctx.routes.register(routes_mod.build_routes(ctx.notify.event))
+        ctx.routes.register(routes_mod.build_routes())
 
         log.info(
             "aw-app-template activated: installed %s (greeting=%s), routes mounted",
