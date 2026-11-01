@@ -1,0 +1,203 @@
+name: AI Review
+
+# Advisory AI review of a pull request, published as the commit status
+# `devteam/ai-review` on the PR's head SHA. ADVISORY BY DESIGN: it is never
+# promoted to a required check on its own, and it does not replace
+# `devteam/code-review` — no single automated reviewer is the authority.
+#
+# Inference runs through this workspace's Agents Platform (AP-MT) via its
+# OpenAI-compatible endpoint, against the dedicated `pr-agent-llm` agent.
+# See .pr_agent.toml for why the endpoint and model live here as host env
+# vars rather than in that file.
+#
+# runs-on is ubuntu-latest UNCONDITIONALLY, and this is the one place in this
+# repo that must not copy test.yml's `fromJSON(startsWith(github.repository,
+# 'tekflox/') && ...)` self-hosted pattern. test.yml's own comment spells out
+# why: this is a PUBLIC repo with an open pull_request trigger, so anyone can
+# open a PR from a fork, and a fork PR on the [self-hosted, aw-baremetal]
+# runners is arbitrary code execution on the bare-metal host that runs the
+# whole workspace. GitHub-hosted runners are disposable and free on a public
+# repo. Nothing here is worth that trade.
+#
+# There is also deliberately NO actions/checkout step. PR-Agent reads the diff
+# through the GitHub API, so untrusted PR code is never fetched onto, let
+# alone executed by, the runner. Adding a checkout would hand a fork PR a
+# foothold it currently does not have.
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
+
+# One in-flight review per PR: a new commit supersedes a review of the
+# previous one, which would otherwise comment on a diff that no longer
+# exists.
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+jobs:
+  # A fork PR cannot be reviewed: GitHub does not expose secrets to a
+  # `pull_request` run from a fork, so the API key genuinely does not exist in
+  # that run — which is the intended security property, not a gap to route
+  # around (`pull_request_target` would "fix" it by handing the key to a
+  # fork-controlled context, so it is rejected).
+  #
+  # The requirement this job satisfies is that the failure be visible and
+  # neutral rather than a red X: the review job below is simply skipped (grey)
+  # and this one explains why in the run summary. No commit status is
+  # published for a fork — the head commit lives in the fork, so there is
+  # nothing in this repo to attach one to.
+  fork-notice:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Explain why no AI review ran
+        run: |
+          {
+            echo "### AI review skipped: fork PR (secrets unavailable)"
+            echo
+            echo "This pull request comes from a fork"
+            echo "(\`${{ github.event.pull_request.head.repo.full_name }}\`),"
+            echo "so GitHub does not expose this repository's secrets to the run."
+            echo "The AI review credential is therefore absent by design and the"
+            echo "review cannot run."
+            echo
+            echo "This is not a failure of the pull request. A maintainer can"
+            echo "review it manually, or re-run the AI review from a branch in"
+            echo "this repository."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  ai-review:
+    # Two entry paths, each gated independently.
+    #
+    # pull_request: same-repo only (the fork case is handled above).
+    #
+    # issue_comment: GitHub fires this for BOTH issues and PRs, so
+    # `github.event.issue.pull_request` is what distinguishes them — without
+    # it, every comment on every issue would start a review run. Commands are
+    # restricted to the four we support, and to commenters who already hold
+    # write-ish standing on the repo, so an arbitrary passer-by cannot spend
+    # the workspace's inference budget.
+    #
+    # The sender.type check keeps PR-Agent from reacting to its own (or any
+    # other bot's) comments, which is how a comment loop starts.
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request != null &&
+          (
+            startsWith(github.event.comment.body, '/describe') ||
+            startsWith(github.event.comment.body, '/review') ||
+            startsWith(github.event.comment.body, '/improve') ||
+            startsWith(github.event.comment.body, '/ask')
+          ) &&
+          contains(
+            fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+            github.event.comment.author_association
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    steps:
+      # The head SHA is the commit the status gets attached to. It is directly
+      # available on a pull_request event; on an issue_comment the payload
+      # describes the comment, not the PR, so it has to be looked up.
+      - name: Resolve PR head SHA
+        id: head
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            sha="${{ github.event.pull_request.head.sha }}"
+          else
+            sha="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" \
+                     --jq .head.sha)"
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Head SHA: $sha"
+
+      - name: Mark AI review pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.head.outputs.sha }}" \
+            -f state=pending \
+            -f context=devteam/ai-review \
+            -f description="AI review in progress" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --silent
+
+      - name: PR-Agent
+        id: pragent
+        # Pinned to the v0.49.0 commit, matching this repo's house style for
+        # third-party actions (see test.yml's checkout/setup-python pins): a
+        # tag is mutable, a commit SHA is not.
+        uses: The-PR-Agent/pr-agent@efdde4afe14aa401a3889012c7f3e9ef3081a430 # v0.49.0
+        env:
+          # --- credential -------------------------------------------------
+          # Agent-scoped AP-MT ApiKey, bound to the `aw` workspace. Scoped to
+          # `pr-agent-llm` alone, so a leak cannot dispatch any other agent.
+          OPENAI_KEY: ${{ secrets.AW_PRAGENT_V1_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+          # --- inference routing (host-controlled; see .pr_agent.toml) -----
+          # Dynaconf reads nested settings from SECTION__KEY env vars
+          # (pr_agent/config_loader.py sets envvar_prefix=False and loads
+          # dynaconf's env_loader). These duplicate .pr_agent.toml on purpose:
+          # that file is only read from the DEFAULT BRANCH, so without these
+          # the config could not be validated in the PR that introduces it —
+          # and api_base is rejected from a repo file outright.
+          OPENAI__API_BASE: https://agents-platform.aw.tekflox.com/v1
+          CONFIG__MODEL: openai/agent/pr-agent-llm
+          # No metered fallback provider. The shipped default is a paid model;
+          # leaving it would send the diff off the contracted path on any error.
+          CONFIG__FALLBACK_MODELS: "[]"
+          CONFIG__CUSTOM_MODEL_MAX_TOKENS: "32000"
+          CONFIG__AI_TIMEOUT: "600"
+
+          # --- what runs automatically on a PR event ----------------------
+          # Ignored on an issue_comment run, which executes the command in the
+          # comment body instead.
+          GITHUB_ACTION_CONFIG__AUTO_DESCRIBE: "true"
+          GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
+          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "true"
+
+      # always(), so the status reflects a failed review instead of being left
+      # stuck on "pending" forever — a pending status that never resolves is
+      # indistinguishable from a queue backlog.
+      - name: Publish AI review status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OUTCOME: ${{ steps.pragent.outcome }}
+        run: |
+          set -euo pipefail
+          case "$OUTCOME" in
+            success)   state=success; desc="AI review complete" ;;
+            cancelled) state=error;   desc="AI review cancelled" ;;
+            *)         state=failure; desc="AI review failed - see run log" ;;
+          esac
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.head.outputs.sha }}" \
+            -f state="$state" \
+            -f context=devteam/ai-review \
+            -f description="$desc" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --silent
+          echo "devteam/ai-review -> $state ($desc)"
