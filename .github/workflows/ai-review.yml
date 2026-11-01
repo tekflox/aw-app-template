@@ -77,20 +77,34 @@ jobs:
             echo "this repository."
           } >> "$GITHUB_STEP_SUMMARY"
 
-  ai-review:
-    # Two entry paths, each gated independently.
-    #
-    # pull_request: same-repo only (the fork case is handled above).
-    #
-    # issue_comment: GitHub fires this for BOTH issues and PRs, so
-    # `github.event.issue.pull_request` is what distinguishes them — without
-    # it, every comment on every issue would start a review run. Commands are
-    # restricted to the four we support, and to commenters who already hold
-    # write-ish standing on the repo, so an arbitrary passer-by cannot spend
-    # the workspace's inference budget.
-    #
-    # The sender.type check keeps PR-Agent from reacting to its own (or any
-    # other bot's) comments, which is how a comment loop starts.
+  # Decides whether a review may run, and on which commit — WITHOUT holding
+  # any credential. The review job below needs this one to say yes, which is
+  # what keeps the API key out of a run that should never have had it:
+  # a secret is exposed per job, so the check has to live in a different job
+  # than the key, not merely in an earlier step.
+  #
+  # Two entry paths, gated differently because they carry different payloads
+  # and different risk.
+  #
+  # pull_request: the payload states the head repo, so the fork check is a
+  # cheap `if` below.
+  #
+  # issue_comment: GitHub fires this for BOTH issues and PRs, so
+  # `github.event.issue.pull_request` distinguishes them — without it, every
+  # comment on every issue would start a run. Commenters are limited to those
+  # with write-ish standing so a passer-by cannot spend the inference budget,
+  # and the sender.type check stops PR-Agent reacting to its own comments,
+  # which is how a comment loop starts.
+  #
+  # Crucially, an issue_comment run ALWAYS executes in the base repo's
+  # context and therefore always has access to secrets, even when the PR
+  # being commented on comes from a fork. So the fork check cannot be skipped
+  # on this path just because the pull_request path has one: a maintainer
+  # typing `/review` on an external contribution — an entirely natural thing
+  # to do — would otherwise dispatch a credentialed run against
+  # attacker-supplied diff content. The comment payload does not say whether
+  # the PR is a fork, so it is resolved here via the API.
+  gate:
     if: >-
       github.event.sender.type != 'Bot' &&
       (
@@ -101,12 +115,6 @@ jobs:
         (
           github.event_name == 'issue_comment' &&
           github.event.issue.pull_request != null &&
-          (
-            startsWith(github.event.comment.body, '/describe') ||
-            startsWith(github.event.comment.body, '/review') ||
-            startsWith(github.event.comment.body, '/improve') ||
-            startsWith(github.event.comment.body, '/ask')
-          ) &&
           contains(
             fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
             github.event.comment.author_association
@@ -114,30 +122,72 @@ jobs:
         )
       )
     runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.decide.outputs.allowed }}
+      sha: ${{ steps.decide.outputs.sha }}
     steps:
-      # The head SHA is the commit the status gets attached to. It is directly
-      # available on a pull_request event; on an issue_comment the payload
-      # describes the comment, not the PR, so it has to be looked up.
-      - name: Resolve PR head SHA
-        id: head
+      - name: Decide
+        id: decide
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Via env, never interpolated into the script body: a comment body
+          # is attacker-controlled text, and `${{ }}` would paste it straight
+          # into the shell.
+          BODY: ${{ github.event.comment.body }}
         run: |
           set -euo pipefail
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            sha="${{ github.event.pull_request.head.sha }}"
-          else
-            sha="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}" \
-                     --jq .head.sha)"
+            echo "sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-          echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "Head SHA: $sha"
 
+          # Command matching is done here rather than with startsWith() in an
+          # `if`, because the command is the FIRST WHITESPACE-SEPARATED TOKEN
+          # and nothing else. startsWith('/review') also matches "/reviewing
+          # this tomorrow", spending a review on a sentence that was never a
+          # command; and an equality test instead breaks on the trailing
+          # newline a web-UI comment carries. Taking the first token of the
+          # first line is immune to both.
+          cmd="$(printf '%s' "$BODY" | head -n 1 | tr -d '\r' | awk '{print $1}')"
+          case "$cmd" in
+            /describe|/review|/improve|/ask) ;;
+            *)
+              echo "Not a review command: '$cmd'"
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
+
+          pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
+          head_repo="$(printf '%s' "$pr" | jq -r '.head.repo.full_name // ""')"
+          echo "sha=$(printf '%s' "$pr" | jq -r .head.sha)" >> "$GITHUB_OUTPUT"
+
+          if [ "$head_repo" != "${{ github.repository }}" ]; then
+            {
+              echo "### AI review skipped: \`$cmd\` on a fork PR"
+              echo
+              echo "This pull request's head is \`${head_repo:-a deleted fork}\`, not"
+              echo "\`${{ github.repository }}\`. An \`issue_comment\` run has access to this"
+              echo "repository's secrets regardless of where the PR came from, so running"
+              echo "the review here would send the credentialed reviewer over a diff this"
+              echo "repository does not control. Declined deliberately."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
+
+  ai-review:
+    needs: gate
+    if: needs.gate.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    steps:
       - name: Mark AI review pending
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.head.outputs.sha }}" \
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
             -f state=pending \
             -f context=devteam/ai-review \
             -f description="AI review in progress" \
@@ -222,7 +272,7 @@ jobs:
             cancelled) state=error;   desc="AI review cancelled" ;;
             *)         state=failure; desc="AI review failed - see run log" ;;
           esac
-          gh api -X POST "repos/${{ github.repository }}/statuses/${{ steps.head.outputs.sha }}" \
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
             -f state="$state" \
             -f context=devteam/ai-review \
             -f description="$desc" \
