@@ -141,3 +141,7 @@ def is_conforming(value: Any) -> bool:
         if optional in value and not isinstance(value[optional], str):
             return False
     return True
+
+
+# NOTE: trivial no-op comment — CodeRabbit vs PR-Agent concurrency probe,
+# card 40b5bf3b-9510-816f-ae43-f36f44c7a147. Not for merge.
