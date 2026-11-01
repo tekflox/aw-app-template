@@ -44,3 +44,4 @@ jobs:
       bump: ${{ inputs.bump || '' }}
     secrets:
       MARKETPLACE_SYNC_TOKEN: ${{ secrets.MARKETPLACE_SYNC_TOKEN }}
+      SKILLS_SYNC_TOKEN: ${{ secrets.SKILLS_SYNC_TOKEN }}
