@@ -175,9 +175,23 @@ jobs:
           # --- what runs automatically on a PR event ----------------------
           # Ignored on an issue_comment run, which executes the command in the
           # comment body instead.
+          #
+          # auto_improve is OFF on purpose, and this is a measured decision
+          # rather than a preference. With all three enabled, one pass over
+          # this PR's own 2-file diff cost 203,400 input tokens across 4
+          # model calls in 4m49s (measured 2026-11-01, run 41318153377) —
+          # over the 200k-input budget set for a single pass.
+          #
+          # The cost is not the diff: each call carries ~50k tokens of the
+          # runner CLI harness's own context before the diff is even added,
+          # which is why a deliberately minimal agent does not reduce it.
+          # /improve alone accounted for 2 of the 4 calls (it runs a second
+          # self-reflection pass), so dropping it from the automatic path
+          # roughly halves the per-PR cost while leaving the capability
+          # intact: comment `/improve` on any PR to get it on demand.
           GITHUB_ACTION_CONFIG__AUTO_DESCRIBE: "true"
           GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
-          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "true"
+          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "false"
 
       # always(), so the status reflects a failed review instead of being left
       # stuck on "pending" forever — a pending status that never resolves is
