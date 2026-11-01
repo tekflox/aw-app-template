@@ -193,6 +193,20 @@ jobs:
           GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
           GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "false"
 
+          # A new commit on an open PR must produce a fresh review, and
+          # without these two it silently does not. `synchronize` is handled
+          # before pr_actions and is NOT covered by the auto_* flags above:
+          # it needs handle_push_trigger, which ships false, and a non-empty
+          # push_commands, or the runner logs "Skipping action: synchronize"
+          # and exits 0. That reads as a green, successful review of the new
+          # commit while nothing was reviewed at all — observed here on run
+          # 41318746858 before this was set.
+          GITHUB_ACTION_CONFIG__HANDLE_PUSH_TRIGGER: "true"
+          # Set explicitly rather than relying on the fallback to
+          # github_app.push_commands, and kept in step with the auto_* flags
+          # above: describe + review, with /improve on demand.
+          GITHUB_ACTION_CONFIG__PUSH_COMMANDS: '["/describe", "/review"]'
+
       # always(), so the status reflects a failed review instead of being left
       # stuck on "pending" forever — a pending status that never resolves is
       # indistinguishable from a queue backlog.
