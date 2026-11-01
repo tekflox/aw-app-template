@@ -1,0 +1,50 @@
+# PR-Agent configuration for this repo.
+#
+# Inference goes exclusively through this workspace's Agents Platform
+# (AP-MT) OpenAI-compatible door, served by the dedicated `pr-agent-llm`
+# agent on a `claude-runner-*` model. That agent exists precisely so the
+# review calls carry no other agent's persona or tools — pointing PR-Agent
+# at a general-purpose reviewer agent instead produced a prompt-injection
+# refusal rather than a structured answer.
+#
+# TWO THINGS ARE DELIBERATELY NOT HERE, both verified against the pinned
+# action version (The-PR-Agent/pr-agent v0.49.0) rather than assumed:
+#
+#   1. `[openai] api_base`. PR-Agent treats provider endpoint settings as
+#      host-controlled and IGNORES them when they come from a repository's
+#      own .pr_agent.toml (`pr_agent/config_security.py`:
+#      REPO_HOST_ONLY_KEYS_BY_SECTION["openai"] = {api_base, api_type,
+#      api_version}). Putting it here would look configured and silently do
+#      nothing. It is set as a host env var in
+#      .github/workflows/ai-review.yml instead.
+#   2. The API key. Secret only, via repo secret -> OPENAI_KEY env. Never a
+#      file, never a log.
+#
+# Note also that PR-Agent reads this file from the repo's DEFAULT BRANCH, not
+# from the PR's branch, so edits here only take effect once merged to master.
+# The workflow therefore sets every load-bearing value as an env var too,
+# which is what makes a change to this config testable in the PR that
+# introduces it.
+
+[config]
+# LiteLLM routing: the `openai/` prefix selects the OpenAI-compatible
+# provider; `agent/pr-agent-llm` is AP-MT's own model grammar for "dispatch
+# to the agent with this slug".
+model = "openai/agent/pr-agent-llm"
+
+# Empty on purpose, and load-bearing for a security requirement: the shipped
+# default is `fallback_models = ["gpt-6-luna"]`, a metered third-party model.
+# Left at the default, any failure on the AP-MT path would silently send the
+# diff to a provider outside the contracted inference path.
+fallback_models = []
+
+# LiteLLM has no token-window metadata for `agent/pr-agent-llm`, so without
+# an explicit value the token-budget code raises instead of sizing the
+# request (`pr_agent/algo/token_budget.py` — "no custom_model_max_tokens is
+# set"). Bounds how much diff goes into one request.
+custom_model_max_tokens = 32000
+
+# The shipped default is 120s. A runner-backed call is a whole CLI agent run
+# behind the door, measured at ~11-20s for a small diff but minutes-capable
+# on a large one, so the default would time out mid-review.
+ai_timeout = 600
