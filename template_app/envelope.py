@@ -111,6 +111,18 @@ def error_frame(code: str, message: str) -> dict[str, Any]:
     return {"type": ERROR_TYPE, "data": {"code": code, "message": message}}
 
 
+def reply_to(inbound: dict[str, Any], type_: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Build a reply that correlates itself to ``inbound``.
+
+    The ``re`` of a reply echoes the ``id`` of the frame being answered, and
+    only when that frame actually carried one — an inbound frame with no
+    ``id`` expects no correlation, so the reply must not invent one.
+    ``routes.py``'s echo socket does this by hand; doing it here is what
+    stops the next socket from forgetting the "only when present" half.
+    """
+    return frame(type_, data, re=inbound.get("id"))
+
+
 def is_conforming(value: Any) -> bool:
     """Whether ``value`` is a well-formed envelope.
 

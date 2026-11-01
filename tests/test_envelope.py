@@ -24,6 +24,7 @@ from template_app.envelope import (  # noqa: E402
     frame,
     init_frame,
     is_conforming,
+    reply_to,
 )
 
 
@@ -125,6 +126,22 @@ def test_error_frame_is_not_domain_prefixed():
         "data": {"code": "invalid_json", "message": "frame was not valid JSON"},
     }
     assert got["type"] == "error"
+
+
+# --- reply_to -------------------------------------------------------------
+
+def test_reply_to_echoes_the_inbound_id_as_re():
+    inbound = {"type": "aw_app_template_echo", "data": {}, "id": "a1"}
+    assert reply_to(inbound, "aw_app_template_echo", {"text": "hi"}) == {
+        "type": "aw_app_template_echo",
+        "data": {"text": "hi"},
+        "re": "a1",
+    }
+
+
+def test_reply_to_omits_re_when_the_inbound_frame_had_no_id():
+    inbound = {"type": "aw_app_template_echo", "data": {}}
+    assert "re" not in reply_to(inbound, "aw_app_template_echo")
 
 
 # --- is_conforming --------------------------------------------------------
