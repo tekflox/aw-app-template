@@ -99,6 +99,18 @@ def test_frame_rejects_data_that_is_not_an_object(bad):
         frame("aw_app_template_echo", bad)
 
 
+@pytest.mark.parametrize("bad", [1, [], {}])
+def test_frame_rejects_a_non_string_id(bad):
+    with pytest.raises(ValueError, match="id must be a string"):
+        frame("aw_app_template_echo", id=bad)
+
+
+@pytest.mark.parametrize("bad", [1, [], {}])
+def test_frame_rejects_a_non_string_re(bad):
+    with pytest.raises(ValueError, match="re must be a string"):
+        frame("aw_app_template_echo", re=bad)
+
+
 # --- init_frame -----------------------------------------------------------
 
 def test_init_frame_carries_the_protocol_version():
