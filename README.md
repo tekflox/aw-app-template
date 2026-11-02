@@ -385,3 +385,5 @@ that something is unmistakably unfinished if you forget to replace it.
 Write your app's real answer before your first real release — even an app
 with little to say should clear the "why does this exist / what does it
 do" bar. Delete the CLI-commands section entirely if your app ships no CLI.
+
+<!-- probe: card 40c5bf3b-9510-810d-a7a2-c67f40939c92, ai-review steady-state check, will be reverted before PR close -->
