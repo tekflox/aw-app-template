@@ -1,0 +1,13 @@
+# CodeRabbit disabled for now — this repo's PR review pipeline runs on
+# PR-Agent alone (see .github/workflows/ai-review.yml, .pr_agent.toml),
+# triggered automatically on pull_request, no manual /review needed.
+# Re-enable by flipping auto_review.enabled back to true.
+reviews:
+  auto_review:
+    enabled: false
+  request_changes_workflow: false
+  high_level_summary: false
+  review_status: false
+  collapse_walkthrough: true
+chat:
+  auto_reply: false
