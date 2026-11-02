@@ -32,9 +32,17 @@ on:
 
 # One in-flight review per PR: a new commit supersedes a review of the
 # previous one, which would otherwise comment on a diff that no longer
-# exists.
+# exists. cancel-in-progress is evaluated at the WORKFLOW level, before any
+# job-level `if`, so the sender.type != 'Bot' guard at :109 is correct but
+# unreachable in time, and a bot-sent issue_comment run (e.g. CodeRabbit's
+# auto-comment) was cancelling the real pull_request review it can never
+# itself perform. Bot senders are therefore keyed into a separate no-op
+# group here, one layer earlier, where the kill actually happens; human
+# comment runs stay in the review group so a human /review still supersedes
+# an in-flight review. The key below and the guard at :109 encode the same
+# invariant and must change together (card 40c5bf3b-9510-810d-a7a2-c67f40939c92).
 concurrency:
-  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.sender.type == 'Bot' && 'bot-noop' || 'review' }}
   cancel-in-progress: true
 
 permissions:
