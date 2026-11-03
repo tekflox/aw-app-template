@@ -80,6 +80,30 @@ name: Code Review
 # `/aw-improve` stays OUTSIDE the round machine (round=informational): it is a
 # re-run of the suggestion half, not a review round, and it must not consume
 # round 1 or trigger a merge.
+#
+# ── ONE TRAP, IF YOU ARE EDITING *THIS FILE* IN A PR ──────────────────────
+# The two rounds do not necessarily run the same version of this file.
+#
+#   * Round 1 arrives on `pull_request`, which runs the workflow as it exists
+#     ON THE PR — your edits take effect immediately.
+#   * Round 2 arrives on `issue_comment` (`/aw-review`), and `issue_comment`
+#     is NOT a pull-request event: GitHub runs the DEFAULT BRANCH's copy of
+#     this file. Your edits are invisible to it until they are merged.
+#
+# Measured on PR #13, the PR that introduced this loop: its round-1 run had
+# `headBranch=devteam/two-round-review-merge`, its round-2 run had
+# `headBranch=master, headSha=3fe2263` — master's copy, which had no round
+# logic at all, so round 2 silently behaved like a plain pre-loop review: no
+# round detection, no label change, no merge, no event. Nothing failed; the
+# three steps simply were not in the file that ran.
+#
+# This is a property of GitHub's trigger model, not something to fix here,
+# and it is harmless in steady state (both rounds run master's copy). It
+# matters in exactly one case: a PR that MODIFIES this file cannot exercise
+# its own round 2. Verify that half another way — the eligibility and
+# round-detection scripts are extractable and drivable offline, which is how
+# PR #13 covered it — and expect the first real round 2 to be the one after
+# the merge.
 
 on:
   pull_request:
