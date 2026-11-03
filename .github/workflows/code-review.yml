@@ -727,9 +727,111 @@ jobs:
       # ENABLED by this step, not completed — which is why the `merged` event
       # is POSTed by the separate `merged-event` job below, on the real
       # `pull_request: closed` event, rather than guessed at here.
+      #
+      # ── `--auto` IS NOT A CI GATE, AND THAT IS WHY THE STEP BELOW WAITS ──
+      # `--auto` only pauses for checks that BRANCH PROTECTION marks required.
+      # Verified live on 2026-11-03: this repo's master has no protection at
+      # all (`branches/master/protection` → 404, `rulesets` → [],
+      # `required_status_checks.enforcement_level` → "off", `contexts` → []).
+      # So `--auto` has nothing to wait on and merges the instant the PR is
+      # mergeable — not waiting for test.yml, not for anything.
+      #
+      # That matters because the eligibility computed in this job reflects the
+      # Dev Team REVIEWER's verdict only; it says nothing about whether the
+      # test suite passed. Without the wait below, the moment
+      # AW_DEVTEAM_MERGE_TOKEN lands, a PR with a real test failure that
+      # happens to read clean to the reviewer squash-merges to master — which
+      # `release.yml` watches unconditionally on push — and cuts a release
+      # with nothing red anywhere. Silent degradation aimed at our own release
+      # pipeline. Found by the reviewer this loop dispatches, on PR #13.
+      #
+      # So this does not depend on branch protection existing: it waits for
+      # the repo's own CI on the head SHA itself, and refuses to merge unless
+      # it is actually green. Item 6 (the ruleset) makes this redundant, not
+      # wrong — keep it, so turning item 6 on or off cannot silently open the
+      # window again.
+      - name: Wait for the repo's own CI to be green on this head SHA
+        id: ci_gate
+        if: steps.findings.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          python3 <<'PYEOF'
+          import json, os, subprocess, sys, time
+
+          # Pinned by name, per the design's "coder pins the exact name":
+          # test.yml's job is `coverage`. Present AND passing is required —
+          # "absent" must not read as "fine", or deleting the CI job would
+          # silently re-open this window.
+          REQUIRED = {"coverage"}
+          # Our own review surfaces are advisory by standing rule and must not
+          # gate the merge (devteam/code-review is this very job; waiting on
+          # it would deadlock). CodeRabbit is a SaaS reviewer, also advisory.
+          ADVISORY = {"devteam/ai-review", "devteam/code-review", "ai-review",
+                      "code-review", "gate", "fork-notice", "merged-event",
+                      "CodeRabbit"}
+
+          repo, pr = os.environ["REPO"], os.environ["PR_NUMBER"]
+          deadline = time.time() + 20 * 60
+
+          def checks():
+              out = subprocess.run(
+                  ["gh", "pr", "checks", pr, "--repo", repo,
+                   "--json", "name,state,bucket"],
+                  capture_output=True, text=True)
+              # `gh pr checks` exits non-zero when anything is failing or
+              # pending, so returncode is not an error signal here — only
+              # unparseable output is.
+              try:
+                  return json.loads(out.stdout or "[]")
+              except json.JSONDecodeError:
+                  print(f"::warning::could not parse gh pr checks output: "
+                        f"{out.stdout[:200]} {out.stderr[:200]}")
+                  return None
+
+          while True:
+              rows = checks()
+              if rows is None:
+                  if time.time() > deadline:
+                      print("::error::could not read this PR's checks; refusing to merge")
+                      sys.exit(1)
+                  time.sleep(20); continue
+
+              relevant = [r for r in rows if r.get("name") not in ADVISORY]
+              pending = [r for r in relevant if r.get("bucket") == "pending"]
+              failed = [r for r in relevant if r.get("bucket") in ("fail", "cancel")]
+              passed = {r["name"] for r in relevant if r.get("bucket") == "pass"}
+
+              if failed:
+                  print("::error::refusing to merge — CI is not green on this head SHA: "
+                        + ", ".join(f"{r['name']}={r.get('state')}" for r in failed))
+                  sys.exit(1)
+              if pending:
+                  if time.time() > deadline:
+                      print("::error::refusing to merge — still waiting on "
+                            + ", ".join(r["name"] for r in pending)
+                            + " after 20 min. Re-run /aw-review once CI has settled.")
+                      sys.exit(1)
+                  print("waiting on: " + ", ".join(r["name"] for r in pending))
+                  time.sleep(20); continue
+
+              missing = REQUIRED - passed
+              if missing:
+                  print(f"::error::refusing to merge — required check(s) {sorted(missing)} "
+                        f"did not report a pass on this head SHA. Saw: "
+                        f"{sorted((r['name'], r.get('bucket')) for r in relevant)}")
+                  sys.exit(1)
+              print("CI is green: " + ", ".join(sorted(passed)))
+              break
+          PYEOF
       - name: Merge if eligible
         id: merge
-        if: steps.findings.outputs.eligible == 'true'
+        # ci_gate must have SUCCEEDED, not merely not-failed: it is the thing
+        # standing in for the required checks the ruleset does not yet enforce.
+        if: steps.findings.outputs.eligible == 'true' && steps.ci_gate.outcome == 'success'
         env:
           GH_TOKEN: ${{ secrets.AW_DEVTEAM_MERGE_TOKEN }}
           PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
@@ -896,8 +998,34 @@ jobs:
           fi
           # Which round we finished on, for the record only — read live, same
           # reason as the gate.
-          labels="$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --jq '.[].name' 2>/dev/null || true)"
-          if printf '%s\n' "$labels" | grep -Fxq "devteam:awaiting-fixes"; then
+          #
+          # This one does NOT `exit 1` on a failed fetch, unlike the gate's,
+          # and the asymmetry is deliberate rather than the oversight it looks
+          # like. The gate's label read DECIDES CONTROL FLOW: guessing there
+          # resets a mid-cycle PR to round 1 and can loop. Here it only fills
+          # in a human-readable number in the wake prompt ("Merged after
+          # review round: N") — the idempotency key uses the squash-merge SHA,
+          # so an imprecise round cannot collide or double-dispatch. Failing
+          # this job instead would mean the coder is never woken to sync the
+          # shared tree, which is a strictly worse outcome than an unknown
+          # round number. So: retry, then say `unknown` rather than assert a
+          # round that may be false. (Reviewer finding on PR #13 — right that
+          # the old code swallowed the error, and the fix is to stop lying,
+          # not to start failing.)
+          labels="__FETCH_FAILED__"
+          for attempt in 1 2; do
+            if labels="$(gh api "repos/$REPO/issues/$PR_NUMBER/labels" --jq '.[].name')"; then
+              break
+            fi
+            echo "::warning::label fetch attempt $attempt failed"
+            labels="__FETCH_FAILED__"
+            sleep 3
+          done
+          if [ "$labels" = "__FETCH_FAILED__" ]; then
+            echo "::warning::could not read PR #$PR_NUMBER's labels — reporting round=unknown \
+            rather than guessing. The merge itself is unaffected."
+            round=unknown
+          elif printf '%s\n' "$labels" | grep -Fxq "devteam:awaiting-fixes"; then
             round=2
           else
             round=1
