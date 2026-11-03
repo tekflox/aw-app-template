@@ -24,6 +24,16 @@ name: Code Review
 # skill's "PR deep-review entry path" section if that trade-off ever needs
 # revisiting (comment there, don't just flip this trigger by hand).
 #
+# `/aw-improve` is the lighter-weight sibling command, same gate and same
+# judge: it asks for the improvement-suggestion half of the review only, and
+# tells the judge to skip the dependency/CVE research lens unless the diff
+# genuinely needs it. Not a separate workflow, not a separate output schema
+# — just a narrower dispatch message (see `mode` below and the skill
+# section). Improvement suggestions themselves are NOT gated behind this
+# command; they're part of the judge's normal output on every trigger here,
+# `/aw-improve` only exists to re-run that half on demand without a new PR
+# event.
+#
 # No actions/checkout here either, for the same reason ai-review.yml has
 # none: this workflow never touches PR content directly, only GitHub's own
 # API (gate decision, status, comments). The judge agent reads the actual
@@ -76,6 +86,7 @@ jobs:
       sha: ${{ steps.decide.outputs.sha }}
       base: ${{ steps.decide.outputs.base }}
       pr_number: ${{ steps.decide.outputs.pr_number }}
+      mode: ${{ steps.decide.outputs.mode }}
     steps:
       - name: Decide
         id: decide
@@ -109,22 +120,30 @@ jobs:
             sha="${{ github.event.pull_request.head.sha }}"
             base="${{ github.event.pull_request.base.ref }}"
             author="${{ github.event.pull_request.user.login }}"
+            mode=review
           else
             # Same first-whitespace-token matching as ai-review.yml's gate,
             # and the same reason: startsWith('/aw-review') would also match
             # "/aw-reviewing this later", spending a run on a sentence.
+            # /aw-improve is the lighter-weight sibling command -- same gate,
+            # same judge, just a narrower focus (see the aw-agent-code-reviewer
+            # skill's "PR deep-review entry path" for what `mode` changes).
             cmd="$(printf '%s' "$BODY" | head -n 1 | tr -d '\r' | awk '{print $1}')"
-            if [ "$cmd" != "/aw-review" ]; then
-              echo "Not a review command: '$cmd'"
-              echo "allowed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-            fi
+            case "$cmd" in
+              /aw-review) mode=review ;;
+              /aw-improve) mode=improve ;;
+              *)
+                echo "Not a review command: '$cmd'"
+                echo "allowed=false" >> "$GITHUB_OUTPUT"
+                exit 0
+                ;;
+            esac
 
             pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
             head_repo="$(printf '%s' "$pr" | jq -r '.head.repo.full_name // ""')"
             if [ "$head_repo" != "${{ github.repository }}" ]; then
               {
-                echo "### Code review skipped: \`/aw-review\` on a fork PR"
+                echo "### Code review skipped: \`$cmd\` on a fork PR"
                 echo
                 echo "This pull request's head is \`${head_repo:-a deleted fork}\`, not"
                 echo "\`${{ github.repository }}\`. An \`issue_comment\` run has access to"
@@ -142,6 +161,7 @@ jobs:
           fi
 
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "base=$base" >> "$GITHUB_OUTPUT"
 
@@ -202,16 +222,31 @@ jobs:
           PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
           HEAD_SHA: ${{ needs.gate.outputs.sha }}
           BASE_REF: ${{ needs.gate.outputs.base }}
+          MODE: ${{ needs.gate.outputs.mode }}
         run: |
           set -euo pipefail
+          # mode=improve is /aw-improve: same judge, same budget, just a
+          # narrower ask appended to the dispatch message -- the output
+          # schema and comment-placement rule do not change (see the skill's
+          # "PR deep-review entry path"). Nothing below reads MODE except
+          # this one extra sentence.
           payload="$(jq -n \
             --arg repo "$REPO" --arg pr "$PR_NUMBER" \
-            --arg sha "$HEAD_SHA" --arg base "$BASE_REF" \
+            --arg sha "$HEAD_SHA" --arg base "$BASE_REF" --arg mode "$MODE" \
             '{
               model: "agent/code-reviewer-sonnet",
               messages: [{role: "user", content: (
                 "PR deep review. Repo: " + $repo + ". PR #" + $pr +
                 ". Head SHA: " + $sha + ". Base ref: " + $base + ". " +
+                (if $mode == "improve" then
+                  "Triggered via /aw-improve: focus this run specifically " +
+                  "on producing improvement suggestions for the current " +
+                  "diff (the normal `suggestion` output field), not a full " +
+                  "lens sweep. Do not spin up the dependency/CVE research " +
+                  "lens unless the diff genuinely needs it (e.g. a new or " +
+                  "bumped dependency) -- this is about code-level " +
+                  "improvement, not research. "
+                else "" end) +
                 "Follow the aw-agent-code-reviewer skill'\''s " +
                 "\"PR deep-review entry path\" section for the full " +
                 "contract (lenses, budget, output JSON schema, comment " +
@@ -302,6 +337,27 @@ jobs:
                   text += f"\n\n_Evidence: {evidence}_"
 
               path, line = f.get("file"), f.get("line")
+              # `suggestion` is the raw replacement text for lines
+              # line_start..line, nothing else -- only meaningful anchored to
+              # a real hunk, so it's ignored on a cross-cutting finding (no
+              # path/line). Wrapped in a ```suggestion fence, this renders as
+              # GitHub's native one-click-applicable diff, the same mechanism
+              # CodeRabbit already uses on this repo (not PR-Agent's own
+              # /improve, which -- verified live on this repo -- posts a
+              # prose table with a plain ```diff block instead of a real
+              # suggestion-block comment).
+              suggestion = f.get("suggestion")
+              if suggestion and path and line:
+                  # Same reasoning as the judge-response fence match above:
+                  # don't hardcode a 3-backtick fence -- if `suggestion`
+                  # itself contains a ``` run (plausible for a diff touching
+                  # markdown/YAML/heredoc files, this file included), a fixed
+                  # fence breaks. Open/close with one more backtick than the
+                  # longest run found inside the text, floor 3.
+                  longest_run = max((len(m) for m in re.findall(r"`+", suggestion)), default=0)
+                  sugg_fence = "`" * max(longest_run + 1, 3)
+                  text += f"\n\n{sugg_fence}suggestion\n{suggestion}\n{sugg_fence}"
+
               if path and line:
                   # Line-anchored finding -> inline review comment on that
                   # hunk (pulls/{pr}/comments), same mechanism PR-Agent and
@@ -312,6 +368,13 @@ jobs:
                       "-f", f"path={path}", "-F", f"line={int(line)}",
                       "-f", "side=RIGHT",
                   ]
+                  line_start = f.get("line_start")
+                  # GitHub's REST API requires start_line < line strictly --
+                  # a reversed/equal range from the judge 422s. Drop to a
+                  # single-line suggestion at `line` rather than send one.
+                  if line_start and int(line_start) < int(line):
+                      cmd += ["-F", f"start_line={int(line_start)}",
+                              "-f", "start_side=RIGHT"]
               else:
                   # Cross-cutting finding -> a normal top-level PR comment,
                   # never force-fit onto a line it isn't really about.
