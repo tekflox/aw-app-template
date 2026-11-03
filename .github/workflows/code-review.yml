@@ -132,6 +132,7 @@ jobs:
       pr_number: ${{ steps.decide.outputs.pr_number }}
       mode: ${{ steps.decide.outputs.mode }}
       round: ${{ steps.decide.outputs.round }}
+      is_draft: ${{ steps.decide.outputs.is_draft }}
     steps:
       - name: Decide
         id: decide
@@ -165,6 +166,7 @@ jobs:
             sha="${{ github.event.pull_request.head.sha }}"
             base="${{ github.event.pull_request.base.ref }}"
             author="${{ github.event.pull_request.user.login }}"
+            is_draft="${{ github.event.pull_request.draft }}"
             mode=review
           else
             # Same first-whitespace-token matching as ai-review.yml's gate,
@@ -203,6 +205,7 @@ jobs:
             sha="$(printf '%s' "$pr" | jq -r .head.sha)"
             base="$(printf '%s' "$pr" | jq -r .base.ref)"
             author="$(printf '%s' "$pr" | jq -r .user.login)"
+            is_draft="$(printf '%s' "$pr" | jq -r '.draft')"
           fi
 
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
@@ -216,8 +219,36 @@ jobs:
           # label this very loop added on the previous round can be missing
           # from it. Reading it live is the difference between a round-2 pass
           # and silently re-running round 1 forever.
-          labels="$(gh api "repos/${{ github.repository }}/issues/$pr_number/labels" \
-                      --jq '.[].name' 2>/dev/null || true)"
+          #
+          # This fetch FAILS LOUDLY, with retries, and never falls back to an
+          # empty label set. The first version swallowed errors
+          # (`2>/dev/null || true`), which meant a rate limit or a network
+          # blip produced "" -> round=1 on a PR actually carrying
+          # `devteam:awaiting-fixes` or `devteam:needs-human`: a mid-escalation
+          # PR silently reset to a fresh round 1, re-dispatching a full review
+          # instead of the lenient lens and, worst case, cycling
+          # coder-wake/re-review without ever reaching merge or escalation,
+          # because each retry can hit the same transient failure. Caught by
+          # PR-Agent on PR #13. Empty output is a legitimate answer here (a PR
+          # with no labels), so "no labels" and "could not read the labels"
+          # cannot be allowed to look the same.
+          labels=""
+          for attempt in 1 2 3; do
+            if labels="$(gh api "repos/${{ github.repository }}/issues/$pr_number/labels" \
+                           --jq '.[].name')"; then
+              break
+            fi
+            echo "label fetch attempt $attempt failed"
+            labels="__FETCH_FAILED__"
+            sleep $(( attempt * 3 ))
+          done
+          if [ "$labels" = "__FETCH_FAILED__" ]; then
+            echo "::error::could not read PR #$pr_number's labels after 3 attempts. \
+            Refusing to guess the review round: defaulting to round 1 would reset a PR \
+            that is mid-fix-cycle or already escalated. Re-run this workflow once the \
+            GitHub API is answering again."
+            exit 1
+          fi
           has_label() { printf '%s\n' "$labels" | grep -Fxq "$1"; }
 
           if [ "$mode" = "improve" ]; then
@@ -234,7 +265,11 @@ jobs:
             round=1
           fi
           echo "round=$round" >> "$GITHUB_OUTPUT"
-          echo "round=$round (labels: $(printf '%s' "$labels" | tr '\n' ' '))"
+          # Draft state gates the MERGE, not the review: reviewing a WIP draft
+          # early is the point, un-drafting and merging it is not. See the
+          # eligibility step and the merge step's own live re-check.
+          echo "is_draft=${is_draft:-false}" >> "$GITHUB_OUTPUT"
+          echo "round=$round is_draft=${is_draft:-false} (labels: $(printf '%s' "$labels" | tr '\n' ' '))"
 
           if ! is_trusted "$author"; then
             {
@@ -385,6 +420,7 @@ jobs:
           PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
           HEAD_SHA: ${{ needs.gate.outputs.sha }}
           ROUND: ${{ needs.gate.outputs.round }}
+          IS_DRAFT: ${{ needs.gate.outputs.is_draft }}
         run: |
           set -euo pipefail
           python3 <<'PYEOF'
@@ -549,6 +585,20 @@ jobs:
               # informational / needs-human: never eligible, by definition.
               eligible = False
 
+          # A DRAFT PR is never merge-eligible, whatever the review said.
+          # `opened` fires for a PR created as a draft (`ready_for_review` is
+          # the separate later event, not a replacement), so without this a
+          # trusted author opening a WIP draft that happens to review clean
+          # got it un-drafted and squash-merged to master without ever saying
+          # it was ready — the one signal that exists to prevent exactly that.
+          # Caught on PR #13 by the reviewer this loop dispatches. Reviewing a
+          # draft stays useful and still happens; only the merge is withheld,
+          # and marking it ready_for_review re-triggers a fresh round 1.
+          if eligible and os.environ.get("IS_DRAFT", "").lower() == "true":
+              eligible = False
+              print("::notice::PR is a DRAFT — review complete, merge withheld. "
+                    "Mark it ready for review to re-run round 1 and merge.")
+
           if missing_field:
               print(f"::warning::{missing_field} round-2 finding(s) have no "
                     f"`blocks_merge` field — counted as BLOCKING (fail closed). "
@@ -667,9 +717,23 @@ jobs:
             release.yml, so the release would silently stop happening."
             exit 1
           fi
-          # No-op on a PR that is already ready; `|| true` because gh exits
-          # non-zero in exactly that case and it is not an error here.
-          gh pr ready "$PR_NUMBER" --repo "${{ github.repository }}" || true
+          # Second, independent draft guard, re-read LIVE rather than taken
+          # from the gate's snapshot: the author can mark the PR draft while
+          # the review is still running (a deep review takes minutes), and
+          # that is exactly the moment they most mean "do not merge this".
+          # The authoritative guard is in the eligibility step; this one costs
+          # one API call and closes the window that one cannot see.
+          #
+          # There is deliberately NO `gh pr ready` here any more. The design
+          # called it a "no-op if not draft", which is true and beside the
+          # point: the case where it is NOT a no-op is the one where it
+          # un-drafts somebody's work-in-progress and merges it.
+          if [ "$(gh pr view "$PR_NUMBER" --repo "${{ github.repository }}" \
+                    --json isDraft --jq .isDraft)" = "true" ]; then
+            echo "::notice::#$PR_NUMBER became a draft since the review started — \
+            not merging. Mark it ready for review to re-run round 1."
+            exit 0
+          fi
           gh pr merge "$PR_NUMBER" --repo "${{ github.repository }}" \
             --squash --auto --delete-branch
           echo "squash auto-merge enabled on #$PR_NUMBER by AW_DEVTEAM_MERGE_TOKEN"
@@ -700,6 +764,11 @@ jobs:
           ROUND: ${{ needs.gate.outputs.round }}
           FINDINGS_COUNT: ${{ steps.findings.outputs.findings_count }}
           BLOCKING_COUNT: ${{ steps.findings.outputs.blocking_count }}
+          # Carried into the payload so an `escalate` that happened only
+          # because the judge omitted `blocks_merge` says so to the human it
+          # pings, instead of reading as a real blocking finding. The inline
+          # ::warning:: alone was invisible to anyone not reading this job log.
+          MISSING_BLOCKS_MERGE: ${{ steps.findings.outputs.missing_blocks_merge }}
           ELIGIBLE: ${{ steps.findings.outputs.eligible }}
           PR_URL: ${{ github.server_url }}/${{ github.repository }}/pull/${{ needs.gate.outputs.pr_number }}
         run: |
@@ -734,6 +803,7 @@ jobs:
               "counts": json.load(open("/tmp/devteam_counts.json")),
               "findings": json.load(open("/tmp/devteam_findings.json")),
               "blocking": json.load(open("/tmp/devteam_blocking.json")),
+              "missing_blocks_merge": int(os.environ.get("MISSING_BLOCKS_MERGE") or 0),
           }
           # Sign the EXACT bytes that get posted — build once, write once,
           # sign the file's contents, send the file. Re-serializing between
