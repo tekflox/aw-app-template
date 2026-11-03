@@ -266,10 +266,14 @@ jobs:
           # backtick run against the CLOSING one, not a naive text[3:-3]
           # slice -- a fence can open with 4+ backticks (documented gotcha:
           # the judge wraps its JSON in a fence no matter how firmly asked
-          # not to). Falls back to scanning for the outermost {...} when
-          # there is no fence at all.
+          # not to). re.search, not re.match: the judge routinely prefixes
+          # the fence with a sentence of prose ("Here is my review:"), and
+          # an anchored match would miss the fence entirely on exactly that
+          # input, falling through to a brace-scan over the prose too.
+          # Falls back to scanning for the outermost {...} only when there
+          # is truly no fence anywhere in the message.
           body = content
-          fence = re.match(r"^\s*(`{3,})[^\n]*\n(.*?)\n\1`*\s*$", content, re.S)
+          fence = re.search(r"(`{3,})[^\n]*\n(.*?)\n\1`*", content, re.S)
           if fence:
               body = fence.group(2)
           start, end = body.find("{"), body.rfind("}")
@@ -291,7 +295,8 @@ jobs:
           for f in findings:
               sev = str(f.get("severity", "info")).upper()
               conf = f.get("confidence", "possible")
-              text = f"{banner}\n\n**[{sev}/{conf}]** {f.get('title', '')}\n\n{f.get('body', '')}"
+              klass = f.get("class", "diff_local")
+              text = f"{banner}\n\n**[{sev}/{conf}/{klass}]** {f.get('title', '')}\n\n{f.get('body', '')}"
               evidence = f.get("evidence")
               if evidence:
                   text += f"\n\n_Evidence: {evidence}_"
