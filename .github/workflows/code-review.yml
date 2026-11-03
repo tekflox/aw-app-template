@@ -348,7 +348,15 @@ jobs:
               # suggestion-block comment).
               suggestion = f.get("suggestion")
               if suggestion and path and line:
-                  text += f"\n\n```suggestion\n{suggestion}\n```"
+                  # Same reasoning as the judge-response fence match above:
+                  # don't hardcode a 3-backtick fence -- if `suggestion`
+                  # itself contains a ``` run (plausible for a diff touching
+                  # markdown/YAML/heredoc files, this file included), a fixed
+                  # fence breaks. Open/close with one more backtick than the
+                  # longest run found inside the text, floor 3.
+                  longest_run = max((len(m) for m in re.findall(r"`+", suggestion)), default=0)
+                  sugg_fence = "`" * max(longest_run + 1, 3)
+                  text += f"\n\n{sugg_fence}suggestion\n{suggestion}\n{sugg_fence}"
 
               if path and line:
                   # Line-anchored finding -> inline review comment on that
@@ -361,7 +369,10 @@ jobs:
                       "-f", "side=RIGHT",
                   ]
                   line_start = f.get("line_start")
-                  if line_start and int(line_start) != int(line):
+                  # GitHub's REST API requires start_line < line strictly --
+                  # a reversed/equal range from the judge 422s. Drop to a
+                  # single-line suggestion at `line` rather than send one.
+                  if line_start and int(line_start) < int(line):
                       cmd += ["-F", f"start_line={int(line_start)}",
                               "-f", "start_side=RIGHT"]
               else:
