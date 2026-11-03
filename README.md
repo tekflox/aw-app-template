@@ -385,3 +385,4 @@ that something is unmistakably unfinished if you forget to replace it.
 Write your app's real answer before your first real release — even an app
 with little to say should clear the "why does this exist / what does it
 do" bar. Delete the CLI-commands section entirely if your app ships no CLI.
+<!-- kill-test probe, do not merge -->
