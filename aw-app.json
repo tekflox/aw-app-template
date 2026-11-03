@@ -15,7 +15,9 @@
   "runtime": {
     "python": ">=3.11",
     "entrypoint": "template_app.plugin:TemplateAppPlugin",
-    "pip_requires": [],
+    "pip_requires": [
+      "PyYAML==5.3.1"
+    ],
     "standalone": {
       "module": "template_app",
       "default_port": 9400
