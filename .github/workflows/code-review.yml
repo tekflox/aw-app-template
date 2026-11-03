@@ -1,0 +1,376 @@
+name: Code Review
+
+# Deep PR review by the Dev Team's own reviewer agent (`code-reviewer-sonnet`),
+# published as the commit status `devteam/code-review` on the PR's head SHA.
+# ADVISORY BY DESIGN, same standing rule as `devteam/ai-review`: no single
+# automated reviewer is the authority, and this is never promoted to a
+# required check on its own.
+#
+# This file is deliberately SEPARATE from ai-review.yml, not a job inside it.
+# ai-review.yml's concurrency group is evaluated at the WORKFLOW level, before
+# any job `if` — the exact mechanism behind the 809a1a6 incident, where
+# CodeRabbit's own auto-comment landed in that group and cancelled PR-Agent's
+# in-flight run. A job here would either inherit that same group (reintroduce
+# the bug) or need to move it to job level (a semantic change to a file that
+# already burned once). A separate file sidesteps both: its own concurrency
+# group below shares no prefix with ai-review's, so that cancellation class is
+# impossible between the two BY CONSTRUCTION, not by care. ai-review.yml is
+# not touched by this change at all.
+#
+# Trigger surface deliberately excludes `synchronize`: a full deep review
+# (one judge run plus up to 3 research runs) costs real subscription budget,
+# and PR-Agent already reviews every push. Re-triggering after further pushes
+# is `/aw-review` on demand, not automatic — see the aw-agent-code-reviewer
+# skill's "PR deep-review entry path" section if that trade-off ever needs
+# revisiting (comment there, don't just flip this trigger by hand).
+#
+# No actions/checkout here either, for the same reason ai-review.yml has
+# none: this workflow never touches PR content directly, only GitHub's own
+# API (gate decision, status, comments). The judge agent reads the actual
+# diff from ITS OWN session, where the real repo is already checked out on
+# this workspace — seeing untrusted fork code never depends on what this
+# runner does.
+
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+  issue_comment:
+    types: [created]
+
+concurrency:
+  group: code-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  statuses: write
+
+jobs:
+  # Same two-entry-path shape as ai-review.yml's gate (fork check on both
+  # paths, first-token command parse, comment body via env never
+  # interpolated into the shell) — see that file's own comments for why each
+  # piece is there. The one addition: an author allowlist, narrower than the
+  # fork check and layered on top of it, not instead of it.
+  gate:
+    if: >-
+      github.event.sender.type != 'Bot' &&
+      (
+        (
+          github.event_name == 'pull_request' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        ) ||
+        (
+          github.event_name == 'issue_comment' &&
+          github.event.issue.pull_request != null &&
+          contains(
+            fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+            github.event.comment.author_association
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    outputs:
+      allowed: ${{ steps.decide.outputs.allowed }}
+      sha: ${{ steps.decide.outputs.sha }}
+      base: ${{ steps.decide.outputs.base }}
+      pr_number: ${{ steps.decide.outputs.pr_number }}
+    steps:
+      - name: Decide
+        id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Via env, never interpolated into the script body — a comment
+          # body is attacker-controlled text (same rationale as ai-review.yml).
+          BODY: ${{ github.event.comment.body }}
+          # Comma-separated GitHub logins, `gh variable set` (no commit) --
+          # see this workflow's own trailing comment for the exact command.
+          # Unset resolves to `fredericowu` HERE, in code, never to "nobody"
+          # or "everyone" (the allowlist-unset-ships-green-and-invisible
+          # failure mode is documented in the KB).
+          TRUSTED_AUTHORS: ${{ vars.AW_REVIEW_TRUSTED_AUTHORS }}
+        run: |
+          set -euo pipefail
+          allowlist="${TRUSTED_AUTHORS:-fredericowu}"
+
+          is_trusted() {
+            local login="$1" entry
+            IFS=',' read -ra arr <<< "$allowlist"
+            for entry in "${arr[@]}"; do
+              entry="$(echo "$entry" | xargs)"
+              [ "$entry" = "$login" ] && return 0
+            done
+            return 1
+          }
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            pr_number="${{ github.event.pull_request.number }}"
+            sha="${{ github.event.pull_request.head.sha }}"
+            base="${{ github.event.pull_request.base.ref }}"
+            author="${{ github.event.pull_request.user.login }}"
+          else
+            # Same first-whitespace-token matching as ai-review.yml's gate,
+            # and the same reason: startsWith('/aw-review') would also match
+            # "/aw-reviewing this later", spending a run on a sentence.
+            cmd="$(printf '%s' "$BODY" | head -n 1 | tr -d '\r' | awk '{print $1}')"
+            if [ "$cmd" != "/aw-review" ]; then
+              echo "Not a review command: '$cmd'"
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
+            head_repo="$(printf '%s' "$pr" | jq -r '.head.repo.full_name // ""')"
+            if [ "$head_repo" != "${{ github.repository }}" ]; then
+              {
+                echo "### Code review skipped: \`/aw-review\` on a fork PR"
+                echo
+                echo "This pull request's head is \`${head_repo:-a deleted fork}\`, not"
+                echo "\`${{ github.repository }}\`. An \`issue_comment\` run has access to"
+                echo "this repository's secrets regardless of where the PR came from, so"
+                echo "running the credentialed reviewer here would send it over a diff"
+                echo "this repository does not control. Declined deliberately."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "allowed=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            pr_number="${{ github.event.issue.number }}"
+            sha="$(printf '%s' "$pr" | jq -r .head.sha)"
+            base="$(printf '%s' "$pr" | jq -r .base.ref)"
+            author="$(printf '%s' "$pr" | jq -r .user.login)"
+          fi
+
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+
+          if ! is_trusted "$author"; then
+            {
+              echo "### Deep review skipped: \`$author\` is not a trusted author"
+              echo
+              echo "\`AW_REVIEW_TRUSTED_AUTHORS\` is \`$allowlist\`. This narrows"
+              echo "same-repo pushes to reviewers worth the credentialed run's"
+              echo "budget — \`devteam/ai-review\` still runs for everyone."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "allowed=true" >> "$GITHUB_OUTPUT"
+
+  code-review:
+    needs: gate
+    if: needs.gate.outputs.allowed == 'true'
+    runs-on: ubuntu-latest
+    # Hard ceiling on a dead/stalled judge — paired with the server-side 900s
+    # runner timeout on the dispatch call below and the always()-finalize
+    # step, so `devteam/code-review` can never stay `pending` forever.
+    timeout-minutes: 20
+    steps:
+      - name: Mark code review pending
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
+            -f state=pending \
+            -f context=devteam/code-review \
+            -f description="Dev Team deep review in progress" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --silent
+
+      # Agent-scoped AP-MT ApiKey, workspace-bound to `aw`, scoped to
+      # `code-reviewer-sonnet` alone — same minting pattern as
+      # AW_PRAGENT_V1_KEY. A leak can only dispatch this one agent.
+      #
+      # `curl --max-time 960` outlives the server-side 900s runner ceiling on
+      # purpose, so a slow-but-alive run gets its own answer back rather than
+      # this step timing out first and masking it as a dispatch failure.
+      #
+      # The message body is plain coordinates, no [SYSTEM] framing and no
+      # anti-refusal wording: AP-MT's /v1 door injects this text as a USER
+      # turn, and anti-refusal boilerplate has caused refusals here before
+      # (documented in the KB). Everything tunable about the review itself
+      # (lenses, budget, output schema, comment-placement rule, bot-identity
+      # banner) lives in the aw-agent-code-reviewer skill's "PR deep-review
+      # entry path" section, not here — so tuning it needs `update_skill`,
+      # never a commit to this file.
+      - name: Dispatch Code Reviewer - Sonnet
+        id: dispatch
+        env:
+          AW_CODEREVIEW_V1_KEY: ${{ secrets.AW_CODEREVIEW_V1_KEY }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.gate.outputs.sha }}
+          BASE_REF: ${{ needs.gate.outputs.base }}
+        run: |
+          set -euo pipefail
+          payload="$(jq -n \
+            --arg repo "$REPO" --arg pr "$PR_NUMBER" \
+            --arg sha "$HEAD_SHA" --arg base "$BASE_REF" \
+            '{
+              model: "agent/code-reviewer-sonnet",
+              messages: [{role: "user", content: (
+                "PR deep review. Repo: " + $repo + ". PR #" + $pr +
+                ". Head SHA: " + $sha + ". Base ref: " + $base + ". " +
+                "Follow the aw-agent-code-reviewer skill'\''s " +
+                "\"PR deep-review entry path\" section for the full " +
+                "contract (lenses, budget, output JSON schema, comment " +
+                "placement). Your final message must be only the JSON " +
+                "object described there."
+              )}]
+            }')"
+          http_code="$(curl -sS --max-time 960 -o /tmp/dispatch_response.json \
+            -w '%{http_code}' \
+            -X POST "https://agents-platform.aw.tekflox.com/v1/chat/completions" \
+            -H "Authorization: Bearer $AW_CODEREVIEW_V1_KEY" \
+            -H "Content-Type: application/json" \
+            --data-binary "$payload")"
+          echo "dispatch HTTP $http_code"
+          cat /tmp/dispatch_response.json
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            echo "::error::dispatch failed with HTTP $http_code"
+            exit 1
+          fi
+
+      # The judge never calls `gh` to post its own review (see the skill
+      # section it was dispatched to follow): its session's `gh` is the
+      # SAME shared personal credential every Dev Team agent reads/writes
+      # the repo with, so a comment posted through it would render as
+      # Frederico's own GitHub account, not as an automated reviewer — the
+      # opposite of what a distinct bot identity is for. This step parses
+      # the judge's returned JSON and posts every comment itself, under
+      # `secrets.GITHUB_TOKEN` (renders as `github-actions[bot]`, the SAME
+      # bot PR-Agent uses — but with a distinct banner so the two are not
+      # mistaken for each other on the PR).
+      - name: Post findings and prepare the status description
+        id: findings
+        if: always() && steps.dispatch.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.gate.outputs.pr_number }}
+          HEAD_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          set -euo pipefail
+          python3 <<'PYEOF'
+          import json
+          import os
+          import re
+          import subprocess
+          import sys
+
+          raw = json.load(open("/tmp/dispatch_response.json"))
+          content = raw["choices"][0]["message"]["content"]
+
+          # Strip a markdown fence by matching the OPENING fence's own
+          # backtick run against the CLOSING one, not a naive text[3:-3]
+          # slice -- a fence can open with 4+ backticks (documented gotcha:
+          # the judge wraps its JSON in a fence no matter how firmly asked
+          # not to). re.search, not re.match: the judge routinely prefixes
+          # the fence with a sentence of prose ("Here is my review:"), and
+          # an anchored match would miss the fence entirely on exactly that
+          # input, falling through to a brace-scan over the prose too.
+          # Falls back to scanning for the outermost {...} only when there
+          # is truly no fence anywhere in the message.
+          body = content
+          fence = re.search(r"(`{3,})[^\n]*\n(.*?)\n\1`*", content, re.S)
+          if fence:
+              body = fence.group(2)
+          start, end = body.find("{"), body.rfind("}")
+          if start == -1 or end == -1:
+              print("::error::no JSON object found in the judge's response")
+              print(content[:2000], file=sys.stderr)
+              sys.exit(1)
+          data = json.loads(body[start:end + 1])
+
+          repo = os.environ["REPO"]
+          pr = os.environ["PR_NUMBER"]
+          sha = os.environ["HEAD_SHA"]
+          banner = (
+              "\U0001F50E **Dev Team Code Review** — automated deep "
+              "review by `code-reviewer-sonnet`, not PR-Agent."
+          )
+
+          findings = data.get("findings") or []
+          for f in findings:
+              sev = str(f.get("severity", "info")).upper()
+              conf = f.get("confidence", "possible")
+              klass = f.get("class", "diff_local")
+              text = f"{banner}\n\n**[{sev}/{conf}/{klass}]** {f.get('title', '')}\n\n{f.get('body', '')}"
+              evidence = f.get("evidence")
+              if evidence:
+                  text += f"\n\n_Evidence: {evidence}_"
+
+              path, line = f.get("file"), f.get("line")
+              if path and line:
+                  # Line-anchored finding -> inline review comment on that
+                  # hunk (pulls/{pr}/comments), same mechanism PR-Agent and
+                  # CodeRabbit already use on this repo.
+                  cmd = [
+                      "gh", "api", f"repos/{repo}/pulls/{pr}/comments",
+                      "-f", f"body={text}", "-f", f"commit_id={sha}",
+                      "-f", f"path={path}", "-F", f"line={int(line)}",
+                      "-f", "side=RIGHT",
+                  ]
+              else:
+                  # Cross-cutting finding -> a normal top-level PR comment,
+                  # never force-fit onto a line it isn't really about.
+                  cmd = ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
+                         "-f", f"body={text}"]
+
+              result = subprocess.run(cmd, capture_output=True, text=True)
+              if result.returncode != 0:
+                  # An inline anchor 422s when that line isn't part of the
+                  # diff (stale hunk, renamed file) -- fall back to a
+                  # top-level comment rather than silently losing the
+                  # finding.
+                  print(f"::warning::inline comment failed, falling back to "
+                        f"top-level: {result.stderr[:300]}")
+                  fallback_text = text + f"\n\n_(anchored at {path}:{line} originally)_"
+                  subprocess.run(
+                      ["gh", "api", f"repos/{repo}/issues/{pr}/comments",
+                       "-f", f"body={fallback_text}"],
+                      check=True,
+                  )
+
+          counts = data.get("counts") or {}
+          parts = [f"{v} {k}" for k, v in counts.items() if v]
+          desc = ("; ".join(parts) or "no findings")[:140]
+          with open(os.environ["GITHUB_OUTPUT"], "a") as gh_out:
+              gh_out.write(f"desc={desc}\n")
+          PYEOF
+
+      # always(), same reason as ai-review.yml's own finalize step: a status
+      # left on `pending` forever is indistinguishable from a queue backlog.
+      # A job killed by `timeout-minutes` above still reaches this step.
+      - name: Publish code-review status
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DISPATCH_OUTCOME: ${{ steps.dispatch.outcome }}
+          FINDINGS_OUTCOME: ${{ steps.findings.outcome }}
+          DESC: ${{ steps.findings.outputs.desc }}
+        run: |
+          set -euo pipefail
+          if [ "$DISPATCH_OUTCOME" = "success" ] && [ "$FINDINGS_OUTCOME" = "success" ]; then
+            state=success
+            description="${DESC:-review complete}"
+          elif [ "$DISPATCH_OUTCOME" = "cancelled" ] || [ "$FINDINGS_OUTCOME" = "cancelled" ]; then
+            state=error
+            description="code review cancelled"
+          else
+            state=failure
+            description="code review failed or timed out - see run log"
+          fi
+          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
+            -f state="$state" \
+            -f context=devteam/code-review \
+            -f description="$description" \
+            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --silent
+          echo "devteam/code-review -> $state ($description)"
+
+# Repo-config step for Frederico to run by hand (not a commit):
+#   gh variable set AW_REVIEW_TRUSTED_AUTHORS --body "fredericowu" --repo tekflox/aw-app-template
+# Comma-separate to add more logins later. Leaving it unset is fine too --
+# the gate job's own script defaults to "fredericowu" in code.
