@@ -15,7 +15,7 @@ name: Code Review
 # the `--auto` note further down.
 #
 # ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
-# `@v1.1.0` is immutable and never retagged. The cautionary precedent is in
+# `@v1.1.2` is immutable and never retagged. The cautionary precedent is in
 # this very repo: `release.yml` calls
 # `tekflox/aw-marketplace/.../app-release.yml@master`, a deliberately moving
 # ref shared by ~45 app repos, and one fail-loud edit there reddened the whole
@@ -36,7 +36,33 @@ name: Code Review
 #           inherited fine, so nothing else in the rollout would have caught
 #           it. See the `secrets:` block at the bottom of this file.
 #
-# Neither v1.0.0 nor v1.0.1 was retagged; both remain published as they were.
+# No tag has ever been retagged; all remain published as they were.
+#
+# ── THE LIMIT OF THE CANARY MODEL, FOUND THE HARD WAY ─────────────────────
+# v1.1.1 is the counter-example, and worth keeping in mind before trusting a
+# green run here as proof for everyone. Its bug — a missing `checks: read`
+# making the merge gate read the PR's checks as an empty list — is invisible
+# on a PUBLIC repo, because a public repo's check rollup is readable without
+# the scope. This repo is public. It merged on v1.1.0 first try while the
+# private AP-MT failed four consecutive rounds on identical code.
+#
+# So this canary proves a tag against a public, `tekflox/*`-owned consumer.
+# It cannot prove anything that depends on being private, and the rollout
+# order should treat a private consumer as a second, independent canary
+# rather than as a follower.
+#
+#   v1.1.2  and then v1.1.1's own fix turned out to be inert: it granted
+#           `checks: read` in all three CALLERS and never requested it in
+#           the shared workflow's own `permissions:` block, which caps the
+#           token to the intersection — so the scope was `none` regardless.
+#           Found by the Dev Team reviewer on #17 (the PR that bumped this
+#           file to v1.1.1), by resolving the pinned tag and reading the
+#           dependency rather than the diff in front of it. Worth noting
+#           that neither this canary nor a private consumer would have
+#           caught it by running: on a public repo the gate works either
+#           way, and on a private one it fails identically before and after.
+#           Only reading both sides finds it, which is why v1.1.2 adds a
+#           test that compares the two permission lists.
 #
 # ── WHAT CHANGED IN BEHAVIOUR, DELIBERATELY ───────────────────────────────
 # One thing, decided and not to be relitigated here: the merge is now a plain
@@ -92,7 +118,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.0
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.2
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
@@ -111,12 +137,29 @@ jobs:
       # (`startsWith(github.repository, 'tekflox/')`); code-review never did,
       # and this conversion does not change that.
     # Declared here as well as in the called workflow: for a reusable workflow
-    # the effective GITHUB_TOKEN permissions are the INTERSECTION of the two.
+    # the effective GITHUB_TOKEN permissions are the INTERSECTION of the two,
+    # so a scope omitted here cannot be granted by the shared file — AND a
+    # scope omitted THERE cannot be granted by this block either. Both lists
+    # have to name it. An unlisted scope is an explicit `none`, not an
+    # inherit, so either side alone caps the token to zero. v1.1.1 is the
+    # worked example: it added `checks: read` here and forgot the shared
+    # file, which bought exactly nothing. v1.1.2 fixes that side and adds a
+    # test comparing the two lists.
     permissions:
       contents: read
       pull-requests: write
       issues: write
       statuses: write
+      # Not load-bearing on THIS repo, and listed anyway so all three callers
+      # share one block. The merge gate reads the PR's checks with `gh pr
+      # checks`, which goes through the Checks API; a PRIVATE repo refuses
+      # that read without this scope and returns an empty list rather than an
+      # error, so the gate reports `required check(s) ['coverage'] did not
+      # report a pass ... Saw: []` every round. This repo is public, which is
+      # exactly why it merged first try on v1.1.0 while the private AP-MT
+      # failed four consecutive rounds on identical code. Anything forked
+      # from this template into a private repo inherits that trap otherwise.
+      checks: read
     # Passed BY NAME, never `secrets: inherit`. `inherit` does not cross an
     # ACCOUNT boundary — GitHub: "workflows that call reusable workflows in
     # the same organization or enterprise can use the `inherit` keyword" —
