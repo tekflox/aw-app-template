@@ -1,28 +1,77 @@
 name: AI Review
 
-# Advisory AI review of a pull request, published as the commit status
-# `devteam/ai-review` on the PR's head SHA. ADVISORY BY DESIGN: it is never
-# promoted to a required check on its own, and it does not replace
-# `devteam/code-review` — no single automated reviewer is the authority.
+# Thin caller. PR-Agent's advisory review itself now lives in
+# fredericowu/aw-shared-workflows — read that file's header for the fork
+# threat model, why there is no checkout and no `runs_on` input, the
+# inference routing, and why `/improve` is on-demand only.
 #
-# Inference runs through this workspace's Agents Platform (AP-MT) via its
-# OpenAI-compatible endpoint, against the dedicated `pr-agent-llm` agent.
-# See .pr_agent.toml for why the endpoint and model live here as host env
-# vars rather than in that file.
+# This file USED to be that review, ~289 lines of it, and it was the ONLY
+# copy anywhere: AP-MT and aw-workspace never had one. That is what triggered
+# the extraction — PR-Agent should be part of the common block every repo in
+# the rollout gets, not a feature of this repo alone. Behaviour is unchanged:
+# all three jobs (fork-notice, gate, ai-review) and every design comment
+# moved across intact.
 #
-# runs-on is ubuntu-latest UNCONDITIONALLY, and this is the one place in this
-# repo that must not copy test.yml's `fromJSON(startsWith(github.repository,
-# 'tekflox/') && ...)` self-hosted pattern. test.yml's own comment spells out
-# why: this is a PUBLIC repo with an open pull_request trigger, so anyone can
-# open a PR from a fork, and a fork PR on the [self-hosted, aw-baremetal]
-# runners is arbitrary code execution on the bare-metal host that runs the
-# whole workspace. GitHub-hosted runners are disposable and free on a public
-# repo. Nothing here is worth that trade.
+# ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
+# `@v1.2.0` is immutable and never retagged, for the reasons code-review.yml
+# spells out at length (and `release.yml`'s own `app-release.yml@master` is
+# the cautionary precedent sitting in this very repo). Bumps are deliberate,
+# one caller at a time, and this repo is the designated canary.
 #
-# There is also deliberately NO actions/checkout step. PR-Agent reads the diff
-# through the GitHub API, so untrusted PR code is never fetched onto, let
-# alone executed by, the runner. Adding a checkout would hand a fork PR a
-# foothold it currently does not have.
+# v1.2.0 is the tag that ADDS ai-review-reusable.yml. It changes nothing in
+# code-review-reusable.yml, so this PR deliberately does NOT bump
+# code-review.yml's own `@v1.1.4` pin: tags are immutable, so that pin is
+# under no pressure, and moving two things at once would make a canary
+# failure ambiguous.
+#
+# Note the shared repo keeps ONE `v*` tag line for both workflows rather
+# than an `ai-v*` family — the ruleset that enforces tag immutability targets
+# `refs/tags/v*` only, so a second family would be unprotected.
+#
+# ── WHY THIS IS STILL A SEPARATE FILE FROM code-review.yml ────────────────
+# Unchanged, and still by construction rather than by convention. The two
+# workflows' `concurrency` groups must not share a prefix: `concurrency` is
+# evaluated at the WORKFLOW level, before any job-level `if`, which is the
+# exact mechanism behind the 809a1a6 incident where CodeRabbit's auto-comment
+# landed in this workflow's group and cancelled PR-Agent's in-flight run.
+# Merging the two callers into one file would re-open that class of bug.
+#
+# ── THE GROUP KEY BELOW IS LOAD-BEARING ───────────────────────────────────
+# It is not boilerplate and it did not become safe by moving the review into
+# a shared file — the opposite: the `sender.type != 'Bot'` guard that is the
+# OTHER half of this invariant now lives in the shared workflow's `gate` job,
+# in a different repo, while the key stays here (a reusable workflow's own
+# `concurrency` would key on the shared file's identity, collapsing every
+# caller into one queue). The `bot-noop` arm is the 809a1a6 fix: bot senders
+# are keyed into a separate no-op group one layer earlier, where the kill
+# actually happens, while human comment runs stay in the review group so a
+# human `/review` still supersedes an in-flight review.
+#
+# Card 40c5bf3b-9510-810d-a7a2-c67f40939c92. The shared workflow's caller
+# checklist carries this exact string and two tests in that repo assert both
+# halves, precisely because the halves are now in different repos.
+#
+# ── TRIGGERS: `synchronize` IS HERE ───────────────────────────────────────
+# Unlike code-review.yml, which deliberately excludes it. PR-Agent reviews
+# every push by design (the shared workflow sets HANDLE_PUSH_TRIGGER and
+# PUSH_COMMANDS for exactly that), whereas a full deep review costs real
+# subscription budget and is round-driven.
+#
+# ── .pr_agent.toml STAYS ──────────────────────────────────────────────────
+# Not deleted, and not needed either: every load-bearing value is set as a
+# host env var in the shared workflow, which is what makes a change to them
+# testable in the PR that introduces it. PR-Agent reads that file from the
+# DEFAULT BRANCH only, and rejects `[openai] api_base` from a repo file
+# outright. It is kept here as documentation of that asymmetry — new callers
+# in the rollout need no toml at all.
+#
+# ── ONE TRAP, IF YOU ARE EDITING *THIS FILE* IN A PR ──────────────────────
+# `pull_request` runs this file's PR copy, so the PR that introduces this
+# conversion DOES exercise its own `pull_request` path live — expect
+# `devteam/ai-review` to go pending -> success on the PR itself.
+# `issue_comment` (`/review`, `/improve`, `/ask`) ALWAYS runs the DEFAULT
+# BRANCH's copy, so that path cannot be verified until the next PR after
+# merge. Don't burn time "debugging" it.
 
 on:
   pull_request:
@@ -30,260 +79,48 @@ on:
   issue_comment:
     types: [created]
 
-# One in-flight review per PR: a new commit supersedes a review of the
-# previous one, which would otherwise comment on a diff that no longer
-# exists. cancel-in-progress is evaluated at the WORKFLOW level, before any
-# job-level `if`, so the sender.type != 'Bot' guard at :109 is correct but
-# unreachable in time, and a bot-sent issue_comment run (e.g. CodeRabbit's
-# auto-comment) was cancelling the real pull_request review it can never
-# itself perform. Bot senders are therefore keyed into a separate no-op
-# group here, one layer earlier, where the kill actually happens; human
-# comment runs stay in the review group so a human /review still supersedes
-# an in-flight review. The key below and the guard at :109 encode the same
-# invariant and must change together (card 40c5bf3b-9510-810d-a7a2-c67f40939c92).
+# See "THE GROUP KEY BELOW IS LOAD-BEARING" above before touching this.
 concurrency:
   group: ai-review-${{ github.event.pull_request.number || github.event.issue.number }}-${{ github.event.sender.type == 'Bot' && 'bot-noop' || 'review' }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
-  statuses: write
-
 jobs:
-  # A fork PR cannot be reviewed: GitHub does not expose secrets to a
-  # `pull_request` run from a fork, so the API key genuinely does not exist in
-  # that run — which is the intended security property, not a gap to route
-  # around (`pull_request_target` would "fix" it by handing the key to a
-  # fork-controlled context, so it is rejected).
-  #
-  # The requirement this job satisfies is that the failure be visible and
-  # neutral rather than a red X: the review job below is simply skipped (grey)
-  # and this one explains why in the run summary. No commit status is
-  # published for a fork — the head commit lives in the fork, so there is
-  # nothing in this repo to attach one to.
-  fork-notice:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
-    steps:
-      - name: Explain why no AI review ran
-        run: |
-          {
-            echo "### AI review skipped: fork PR (secrets unavailable)"
-            echo
-            echo "This pull request comes from a fork"
-            echo "(\`${{ github.event.pull_request.head.repo.full_name }}\`),"
-            echo "so GitHub does not expose this repository's secrets to the run."
-            echo "The AI review credential is therefore absent by design and the"
-            echo "review cannot run."
-            echo
-            echo "This is not a failure of the pull request. A maintainer can"
-            echo "review it manually, or re-run the AI review from a branch in"
-            echo "this repository."
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  # Decides whether a review may run, and on which commit — WITHOUT holding
-  # any credential. The review job below needs this one to say yes, which is
-  # what keeps the API key out of a run that should never have had it:
-  # a secret is exposed per job, so the check has to live in a different job
-  # than the key, not merely in an earlier step.
-  #
-  # Two entry paths, gated differently because they carry different payloads
-  # and different risk.
-  #
-  # pull_request: the payload states the head repo, so the fork check is a
-  # cheap `if` below.
-  #
-  # issue_comment: GitHub fires this for BOTH issues and PRs, so
-  # `github.event.issue.pull_request` distinguishes them — without it, every
-  # comment on every issue would start a run. Commenters are limited to those
-  # with write-ish standing so a passer-by cannot spend the inference budget,
-  # and the sender.type check stops PR-Agent reacting to its own comments,
-  # which is how a comment loop starts.
-  #
-  # Crucially, an issue_comment run ALWAYS executes in the base repo's
-  # context and therefore always has access to secrets, even when the PR
-  # being commented on comes from a fork. So the fork check cannot be skipped
-  # on this path just because the pull_request path has one: a maintainer
-  # typing `/review` on an external contribution — an entirely natural thing
-  # to do — would otherwise dispatch a credentialed run against
-  # attacker-supplied diff content. The comment payload does not say whether
-  # the PR is a fork, so it is resolved here via the API.
-  gate:
-    if: >-
-      github.event.sender.type != 'Bot' &&
-      (
-        (
-          github.event_name == 'pull_request' &&
-          github.event.pull_request.head.repo.full_name == github.repository
-        ) ||
-        (
-          github.event_name == 'issue_comment' &&
-          github.event.issue.pull_request != null &&
-          contains(
-            fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-            github.event.comment.author_association
-          )
-        )
-      )
-    runs-on: ubuntu-latest
-    outputs:
-      allowed: ${{ steps.decide.outputs.allowed }}
-      sha: ${{ steps.decide.outputs.sha }}
-    steps:
-      - name: Decide
-        id: decide
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Via env, never interpolated into the script body: a comment body
-          # is attacker-controlled text, and `${{ }}` would paste it straight
-          # into the shell.
-          BODY: ${{ github.event.comment.body }}
-        run: |
-          set -euo pipefail
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
-            echo "allowed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          # Command matching is done here rather than with startsWith() in an
-          # `if`, because the command is the FIRST WHITESPACE-SEPARATED TOKEN
-          # and nothing else. startsWith('/review') also matches "/reviewing
-          # this tomorrow", spending a review on a sentence that was never a
-          # command; and an equality test instead breaks on the trailing
-          # newline a web-UI comment carries. Taking the first token of the
-          # first line is immune to both.
-          cmd="$(printf '%s' "$BODY" | head -n 1 | tr -d '\r' | awk '{print $1}')"
-          case "$cmd" in
-            /describe|/review|/improve|/ask) ;;
-            *)
-              echo "Not a review command: '$cmd'"
-              echo "allowed=false" >> "$GITHUB_OUTPUT"
-              exit 0
-              ;;
-          esac
-
-          pr="$(gh api "repos/${{ github.repository }}/pulls/${{ github.event.issue.number }}")"
-          head_repo="$(printf '%s' "$pr" | jq -r '.head.repo.full_name // ""')"
-          echo "sha=$(printf '%s' "$pr" | jq -r .head.sha)" >> "$GITHUB_OUTPUT"
-
-          if [ "$head_repo" != "${{ github.repository }}" ]; then
-            {
-              echo "### AI review skipped: \`$cmd\` on a fork PR"
-              echo
-              echo "This pull request's head is \`${head_repo:-a deleted fork}\`, not"
-              echo "\`${{ github.repository }}\`. An \`issue_comment\` run has access to this"
-              echo "repository's secrets regardless of where the PR came from, so running"
-              echo "the review here would send the credentialed reviewer over a diff this"
-              echo "repository does not control. Declined deliberately."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "allowed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          echo "allowed=true" >> "$GITHUB_OUTPUT"
-
   ai-review:
-    needs: gate
-    if: needs.gate.outputs.allowed == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Mark AI review pending
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
-            -f state=pending \
-            -f context=devteam/ai-review \
-            -f description="AI review in progress" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --silent
-
-      - name: PR-Agent
-        id: pragent
-        # Pinned to the v0.49.0 commit, matching this repo's house style for
-        # third-party actions (see test.yml's checkout/setup-python pins): a
-        # tag is mutable, a commit SHA is not.
-        uses: The-PR-Agent/pr-agent@efdde4afe14aa401a3889012c7f3e9ef3081a430 # v0.49.0
-        env:
-          # --- credential -------------------------------------------------
-          # Agent-scoped AP-MT ApiKey, bound to the `aw` workspace. Scoped to
-          # `pr-agent-llm` alone, so a leak cannot dispatch any other agent.
-          OPENAI_KEY: ${{ secrets.AW_PRAGENT_V1_KEY }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-          # --- inference routing (host-controlled; see .pr_agent.toml) -----
-          # Dynaconf reads nested settings from SECTION__KEY env vars
-          # (pr_agent/config_loader.py sets envvar_prefix=False and loads
-          # dynaconf's env_loader). These duplicate .pr_agent.toml on purpose:
-          # that file is only read from the DEFAULT BRANCH, so without these
-          # the config could not be validated in the PR that introduces it —
-          # and api_base is rejected from a repo file outright.
-          OPENAI__API_BASE: https://agents-platform.aw.tekflox.com/v1
-          CONFIG__MODEL: openai/agent/pr-agent-llm
-          # No metered fallback provider. The shipped default is a paid model;
-          # leaving it would send the diff off the contracted path on any error.
-          CONFIG__FALLBACK_MODELS: "[]"
-          CONFIG__CUSTOM_MODEL_MAX_TOKENS: "32000"
-          CONFIG__AI_TIMEOUT: "600"
-
-          # --- what runs automatically on a PR event ----------------------
-          # Ignored on an issue_comment run, which executes the command in the
-          # comment body instead.
-          #
-          # auto_improve is OFF on purpose, and this is a measured decision
-          # rather than a preference. With all three enabled, one pass over
-          # this PR's own 2-file diff cost 203,400 input tokens across 4
-          # model calls in 4m49s (measured 2026-11-01, run 41318153377) —
-          # over the 200k-input budget set for a single pass.
-          #
-          # The cost is not the diff: each call carries ~50k tokens of the
-          # runner CLI harness's own context before the diff is even added,
-          # which is why a deliberately minimal agent does not reduce it.
-          # /improve alone accounted for 2 of the 4 calls (it runs a second
-          # self-reflection pass), so dropping it from the automatic path
-          # roughly halves the per-PR cost while leaving the capability
-          # intact: comment `/improve` on any PR to get it on demand.
-          GITHUB_ACTION_CONFIG__AUTO_DESCRIBE: "true"
-          GITHUB_ACTION_CONFIG__AUTO_REVIEW: "true"
-          GITHUB_ACTION_CONFIG__AUTO_IMPROVE: "false"
-
-          # A new commit on an open PR must produce a fresh review, and
-          # without these two it silently does not. `synchronize` is handled
-          # before pr_actions and is NOT covered by the auto_* flags above:
-          # it needs handle_push_trigger, which ships false, and a non-empty
-          # push_commands, or the runner logs "Skipping action: synchronize"
-          # and exits 0. That reads as a green, successful review of the new
-          # commit while nothing was reviewed at all — observed here on run
-          # 41318746858 before this was set.
-          GITHUB_ACTION_CONFIG__HANDLE_PUSH_TRIGGER: "true"
-          # Set explicitly rather than relying on the fallback to
-          # github_app.push_commands, and kept in step with the auto_* flags
-          # above: describe + review, with /improve on demand.
-          GITHUB_ACTION_CONFIG__PUSH_COMMANDS: '["/describe", "/review"]'
-
-      # always(), so the status reflects a failed review instead of being left
-      # stuck on "pending" forever — a pending status that never resolves is
-      # indistinguishable from a queue backlog.
-      - name: Publish AI review status
-        if: always()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OUTCOME: ${{ steps.pragent.outcome }}
-        run: |
-          set -euo pipefail
-          case "$OUTCOME" in
-            success)   state=success; desc="AI review complete" ;;
-            cancelled) state=error;   desc="AI review cancelled" ;;
-            *)         state=failure; desc="AI review failed - see run log" ;;
-          esac
-          gh api -X POST "repos/${{ github.repository }}/statuses/${{ needs.gate.outputs.sha }}" \
-            -f state="$state" \
-            -f context=devteam/ai-review \
-            -f description="$desc" \
-            -f target_url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --silent
-          echo "devteam/ai-review -> $state ($desc)"
+    uses: fredericowu/aw-shared-workflows/.github/workflows/ai-review-reusable.yml@v1.2.0
+    # `api_base` left at its default
+    # (https://agents-platform.aw.tekflox.com/v1), which is the literal this
+    # file carried before the conversion. It is the whole input surface.
+    #
+    # Declared here as well as in the called workflow: the effective
+    # GITHUB_TOKEN permissions are the INTERSECTION of the two, so a scope
+    # omitted on EITHER side is an explicit `none` rather than an inherit and
+    # caps the token to zero. v1.1.1 of the sibling workflow is the worked
+    # example — it granted a scope in every caller, forgot the shared file,
+    # and bought exactly nothing.
+    #
+    # No `checks: read` here, unlike code-review.yml: nothing in this review
+    # reads the Checks API. The gate resolves a fork with
+    # `gh api repos/.../pulls`, and the review publishes COMMIT STATUSES,
+    # which are a different API from check-runs. The shared workflow does not
+    # request the scope either, and its parity test compares the two lists in
+    # both directions — so adding it here would be a test failure, not a
+    # harmless extra.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      statuses: write
+    # Passed BY NAME, never `secrets: inherit`. `inherit` does not cross an
+    # ACCOUNT boundary, and when it does not apply it fails SILENTLY with an
+    # empty string rather than an error. Measured on THIS repo, PR #16, on the
+    # sibling workflow: the key IS set here and still arrived empty, because
+    # this repo is `tekflox/*` and the shared workflow is `fredericowu/*`.
+    #
+    # AW_PRAGENT_V1_KEY is already set on this repo (2026-11-01): an
+    # Agents Platform ApiKey bound to the `aw` workspace and scoped to the
+    # `pr-agent-llm` agent alone. The shared workflow reads it with an
+    # explicit fail-loud branch before invoking PR-Agent — new in the
+    # extraction, since a `workflow_call` secret can arrive empty where a
+    # repo secret read directly could not.
+    secrets:
+      AW_PRAGENT_V1_KEY: ${{ secrets.AW_PRAGENT_V1_KEY }}
