@@ -62,29 +62,6 @@ jobs:
           path: .aw-marketplace-schema
       - name: Validate manifest
         run: python3 tests/validate_manifest.py aw-app.json --schema .aw-marketplace-schema/schemas/aw-app.schema.json
-      # ── TEMPORARY, AND SELF-DISARMING — aw-shared-workflows@v1.3.0 proof ──
-      # v1.3.0 replaced the merge gate's 20-minute `gh pr checks` poll with a
-      # real `workflow_run: completed` event, so a merge no longer depends on
-      # this repo's CI finishing before the review verdict lands. That is
-      # exactly the case the old poll handled badly and the one no previous
-      # PR has ever exercised, because `coverage` here normally finishes
-      # first.
-      #
-      # This step makes CI deliberately the SLOWER leg once, so the review
-      # posts `devteam/merge-eligible` while `coverage` is still running. The
-      # same-run merge attempt then exits neutral ("still running"), and the
-      # merge has to arrive via the workflow_run hop or not at all.
-      #
-      # `github.head_ref` is empty on anything that is not a pull_request, and
-      # it is pinned to this one branch, so this step is ALREADY inert
-      # everywhere else the moment it merges — on master, on every other PR,
-      # and in every app scaffolded from this template. The follow-up PR
-      # removes it outright; this guard is so that nothing depends on how fast
-      # that lands.
-      - name: Slow CI down on purpose (v1.3.0 event-path proof)
-        if: github.head_ref == 'devteam/v1.3.0-live-proof'
-        run: sleep 600
-
       - name: Test suite + coverage gate
         # fail_under is read from pyproject.toml's [tool.coverage.report] —
         # see docs/standards/pipeline-testing.md §4.2. html + xml reports are
