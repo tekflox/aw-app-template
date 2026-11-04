@@ -99,8 +99,19 @@ def fake_gh(tmp_path_factory) -> Path:
 
 def _run_eligibility(script: Path, tmp_path, fake_gh, *, findings, counts,
                      round_: str, is_draft: str = "false") -> dict:
-    """Drive the real step script and return its GITHUB_OUTPUT as a dict."""
-    Path("/tmp/dispatch_response.json").write_text(json.dumps(
+    """Drive the real step script and return its GITHUB_OUTPUT as a dict.
+
+    Writes `dispatch_response.json` under this call's own `tmp_path` and
+    points `RUNNER_TEMP` at it, mirroring the production script's own fix:
+    a shared `/tmp/dispatch_response.json` is real host state two jobs on
+    this self-hosted runner can race on (confirmed live — the Release
+    workflow's own test run and the standalone Test workflow, triggered by
+    the same push, clobbered each other's file and produced exactly the
+    'any round-1 finding must wake the coder' failure this test guards).
+    tmp_path is already unique per call, so this isolates each invocation
+    the same way RUNNER_TEMP isolates each real job.
+    """
+    (tmp_path / "dispatch_response.json").write_text(json.dumps(
         {"choices": [{"message": {"content":
             "Here is my review:\n```json\n" + json.dumps(
                 {"findings": findings, "counts": counts}) + "\n```"}}]}))
@@ -110,7 +121,8 @@ def _run_eligibility(script: Path, tmp_path, fake_gh, *, findings, counts,
            "PATH": f"{fake_gh}{os.pathsep}{os.environ['PATH']}",
            "REPO": "tekflox/aw-app-template", "PR_NUMBER": "42",
            "HEAD_SHA": "a" * 40, "ROUND": round_, "IS_DRAFT": is_draft,
-           "GITHUB_OUTPUT": str(out), "GH_TOKEN": "fake"}
+           "GITHUB_OUTPUT": str(out), "GH_TOKEN": "fake",
+           "RUNNER_TEMP": str(tmp_path)}
     proc = subprocess.run([sys.executable, str(script)],
                           capture_output=True, text=True, env=env)
     assert proc.returncode == 0, f"step script failed:\n{proc.stderr[-2000:]}"
