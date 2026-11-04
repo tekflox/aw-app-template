@@ -1,0 +1,68 @@
+# pre-commit — fast local subset of CI, per docs/standards/pipeline-testing.md §6.
+#
+# NOT a replacement for CI: hooks are bypassable (--no-verify) and are not
+# installed on a fresh clone until `pre-commit install` is run. The test
+# suite is deliberately NOT a hook here — see §6's three reasons (it can't
+# run against a real Postgres, this workspace's sessions share one working
+# tree, and CI is already the real gate).
+#
+# Install once per clone:
+#   pip install -r requirements-dev.txt && pre-commit install
+#   npm install --prefix ui   # only needed if you will touch ui/
+#
+# ruff-format IS enabled here, unlike the aw-app-kb pilot: this template is
+# 13 Python files at a verified 100% coverage, so the one-time whole-file
+# reformat (§6b) was done safely in its own commit before this hook was
+# turned on — `ruff format`/`ruff check --fix` on a future change now only
+# touch the lines that actually changed.
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.3
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pylint-errors-only
+        name: pylint (E-class only, blocking — same gate as CI)
+        entry: pylint --disable=all --enable=E --disable=E0401,E1101
+        language: system
+        types: [python]
+        files: ^template_app/
+
+      - id: validate-manifest
+        name: validate aw-app.json
+        entry: python3 tests/validate_manifest.py
+        language: system
+        pass_filenames: false
+        files: ^aw-app\.json$
+
+      - id: eslint
+        name: eslint (ui/)
+        entry: npm run lint --prefix ui
+        language: system
+        pass_filenames: false
+        files: ^ui/.*\.(js|jsx|mjs|cjs)$
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^ui/dist/
+      - id: end-of-file-fixer
+        exclude: ^ui/dist/
+      - id: check-added-large-files
+      - id: check-merge-conflict
+
+  # Same tool as CI (.github/workflows/security-scan.yml runs the OSS CLI at
+  # v8.30.1), pinned to the same major — prevention here, since CI runs
+  # post-push and this repo is public the moment a secret is committed.
+  # language: golang bootstraps its own Go toolchain via pre-commit's
+  # environment manager (verified in this container: first run downloads
+  # and builds gitleaks, ~a few minutes once per clone; cached after).
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks

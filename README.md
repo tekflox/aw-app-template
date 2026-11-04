@@ -335,6 +335,48 @@ page → **Artifacts** → download `coverage-report.zip` → unzip and open
 `coverage.xml` to another tool (Cobertura format) — no local `pytest` run
 needed just to see what's covered.
 
+## Testing, coverage and lint
+
+Reference implementation of `docs/standards/pipeline-testing.md` Phase 1 (see
+that doc for the full design) — the first template-level rollout of the
+estate-wide standard, following the `aw-app-kb` pilot.
+
+Setup:
+
+```bash
+pip install -r requirements-dev.txt && pre-commit install
+npm install --prefix ui  # only needed when touching ui/
+```
+
+- **Coverage gate**: see [CI/CD](#cicd) above — `pytest --cov=template_app`
+  against `pyproject.toml`'s `[tool.coverage.report] fail_under`, a hard 100%
+  floor for this repo specifically.
+- **Lint gate (blocking)**: `pylint template_app --disable=all --enable=E
+  --disable=E0401,E1101` — same gate as `.pre-commit-config.yaml` and CI.
+  `E0401` (import-error) is disabled per the standard — it fires on lazy
+  third-party imports; `E1101` (no-member) is disabled for the same
+  astroid-inference reasons the `aw-app-kb` pilot documented.
+- **JS lint gate (blocking)**: `eslint` (flat config at `ui/eslint.config.js`,
+  `@eslint/js` recommended rules), run as `npm run lint --prefix ui` — both a
+  pre-commit hook (only on a commit touching `ui/*.(js|jsx|mjs|cjs)`) and a CI
+  job (`.github/workflows/test.yml`'s `ui-lint`). No Prettier — see
+  `docs/standards/pipeline-testing.md` §6a for why.
+- **Secret scanning (blocking)**: `gitleaks`, the same OSS CLI
+  `.github/workflows/security-scan.yml` already runs in CI, now also a
+  pre-commit hook — prevention, not just post-push detection, since this repo
+  is public the moment a commit lands.
+- **What auto-fixes vs. what blocks**: `ruff check --fix` and `ruff format`
+  rewrite the offending lines/files for you; `pre-commit-hooks`' whitespace
+  and end-of-file fixers do the same. Pylint, eslint, gitleaks and manifest
+  validation only report and block — there is nothing for them to
+  auto-correct.
+- **pre-commit**: hooks run on `git commit` (ruff + ruff-format, the blocking
+  pylint E-class check, eslint, manifest validation, whitespace/EOF/
+  large-file/merge-conflict hygiene, gitleaks). Bypassable with `--no-verify`;
+  CI is the real gate, this is the fast local subset — see
+  `docs/standards/pipeline-testing.md` §6 for why the test suite itself is
+  deliberately not a hook.
+
 ## Contributing a skill (`contributes.skills`)
 
 This app ships a **skill** — `skills/aw-create-app/SKILL.md` — that teaches an
