@@ -9,6 +9,7 @@ install refusal quoting a field the documentation never mentioned.
 A doc and a validator in different repos will drift; the only question is
 whether anyone finds out. This test is how.
 """
+
 import os
 import re
 
@@ -21,8 +22,9 @@ def _core_manifest_source():
     """aw-workspace's validator, from a sibling checkout."""
     path = os.path.normpath(os.path.join(REPO, "..", "..", "src", "apps", "manifest.py"))
     if not os.path.isfile(path):
-        path = os.path.normpath(os.path.join(REPO, "..", "aw-workspace",
-                                             "src", "apps", "manifest.py"))
+        path = os.path.normpath(
+            os.path.join(REPO, "..", "aw-workspace", "src", "apps", "manifest.py")
+        )
     if not os.path.isfile(path):
         pytest.skip("aw-workspace not checked out next to this repo")
     return open(path).read()
@@ -30,8 +32,9 @@ def _core_manifest_source():
 
 def test_task_types_requiring_agent_slug_match_the_docs():
     source = _core_manifest_source()
-    m = re.search(r'if task_type in \(([^)]*)\):\s*\n\s*if not str\(task\.get\("agent_slug"',
-                  source)
+    m = re.search(
+        r'if task_type in \(([^)]*)\):\s*\n\s*if not str\(task\.get\("agent_slug"', source
+    )
     assert m, "core's agent_slug rule moved — this test needs updating with it"
     enforced = set(re.findall(r'"([a-z_]+)"', m.group(1)))
 
@@ -44,8 +47,10 @@ def test_task_types_requiring_agent_slug_match_the_docs():
     # `agentic_output` for the `command` field and `agent_slug` for another.
     # Co-occurrence is not a claim. This line is.
     m = re.search(r"<!--\s*agent_slug-required:\s*([^>]+?)\s*-->", doc)
-    assert m, ("docs/contributing-tasks.md must carry an "
-               "`<!-- agent_slug-required: ... -->` line for this to be checkable")
+    assert m, (
+        "docs/contributing-tasks.md must carry an "
+        "`<!-- agent_slug-required: ... -->` line for this to be checkable"
+    )
     documented = {t.strip() for t in m.group(1).split(",") if t.strip()}
 
     assert documented == enforced, (

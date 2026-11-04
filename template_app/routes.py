@@ -89,6 +89,7 @@ template ships no ``local_paths`` route and its manifest does not request
 the capability; see ``skills/aw-create-app/SKILL.md`` for the documented
 (not-yet-live) shape.
 """
+
 from __future__ import annotations
 
 import json

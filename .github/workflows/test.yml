@@ -84,3 +84,20 @@ jobs:
             htmlcov/
             coverage.xml
           retention-days: 30
+
+  # The CI counterpart to .pre-commit-config.yaml's `eslint` hook, per
+  # docs/standards/pipeline-testing.md §6a — pre-commit must never be the
+  # only place a check runs (bypassable with --no-verify, not installed
+  # until `pre-commit install`). node-version matches ui/package.json's
+  # `engines.node: ">=24"`.
+  ui-lint:
+    runs-on: ${{ fromJSON(startsWith(github.repository, 'tekflox/') && '["self-hosted","aw-baremetal"]' || '"ubuntu-latest"') }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: "24"
+      - name: Install UI deps
+        run: npm ci --prefix ui
+      - name: ESLint
+        run: npm run lint --prefix ui

@@ -43,6 +43,7 @@ cannot, and that every one of them has shipped at least once:
    ``body.spec_data``). Pointing one at a ``component`` window yields an empty
    Settings pane with no error anywhere.
 """
+
 import json
 import sys
 from pathlib import Path
@@ -60,6 +61,8 @@ if "--schema" in sys.argv:
 
 MANIFEST_PATH = Path(_args[0]).resolve() if _args else Path("aw-app.json").resolve()
 APP_ROOT = MANIFEST_PATH.parent
+
+
 def _resolve_schema() -> Path:
     """Where the schema comes from, most explicit first.
 
@@ -90,8 +93,14 @@ SCHEMA_PATH = _resolve_schema()
 # (src/components/AppWindow.jsx). Keep in sync with that file; anything else
 # in a spec is dead weight that renders nothing.
 KNOWN_WIDGETS = {
-    "markdown", "list", "button", "iframe", "app_iframe",
-    "collapsible", "form", "auth_status",
+    "markdown",
+    "list",
+    "button",
+    "iframe",
+    "app_iframe",
+    "collapsible",
+    "form",
+    "auth_status",
 }
 
 # `form` field input types the renderer gives a dedicated control. `select`
@@ -137,9 +146,11 @@ if bundle and not (APP_ROOT / bundle).is_file():
     # — it never runs `npm run build`. A gitignored dist therefore means the
     # installed app points at a file that does not exist, and its whole
     # frontend silently vanishes.
-    fail(f"frontend bundle missing: {bundle} — run `npm run build` in ui/ AND "
-         f"commit the result (release CI does not build it; check that "
-         f".gitignore does not exclude it)")
+    fail(
+        f"frontend bundle missing: {bundle} — run `npm run build` in ui/ AND "
+        f"commit the result (release CI does not build it; check that "
+        f".gitignore does not exclude it)"
+    )
 
 for skill in contributes.get("skills", []) or []:
     if not (APP_ROOT / skill["path"]).is_file():
@@ -150,12 +161,14 @@ for skill in contributes.get("skills", []) or []:
 # workspace drops that single field with a log line and seeds the agent
 # anyway, so you get a live agent with an EMPTY prompt.
 for _kind, _field in (("agents", "system_prompt_file"), ("groups", "instructions_file")):
-    for entry in ((contributes.get("agents") or {}).get(_kind) or []):
+    for entry in (contributes.get("agents") or {}).get(_kind) or []:
         ref = entry.get(_field)
         if ref and not (APP_ROOT / ref).is_file():
-            fail(f"contributes.agents.{_kind}[{entry.get('slug')!r}]: {_field} "
-                 f"{ref!r} does not exist — the object is still created, with "
-                 f"that field empty.")
+            fail(
+                f"contributes.agents.{_kind}[{entry.get('slug')!r}]: {_field} "
+                f"{ref!r} does not exist — the object is still created, with "
+                f"that field empty."
+            )
 
 migrations = manifest.get("migrations") or {}
 if migrations:
@@ -173,33 +186,43 @@ def check_widgets(widgets, where: str) -> None:
     for widget in widgets or []:
         wtype = widget.get("type")
         if wtype not in KNOWN_WIDGETS:
-            fail(f"{where}: widget type {wtype!r} is not implemented by the "
-                 f"declarative renderer — it will render nothing. "
-                 f"Supported: {', '.join(sorted(KNOWN_WIDGETS))}. "
-                 f"For a live/editable list of rows there is NO widget: serve "
-                 f"your own page and point an `iframe` at it.")
+            fail(
+                f"{where}: widget type {wtype!r} is not implemented by the "
+                f"declarative renderer — it will render nothing. "
+                f"Supported: {', '.join(sorted(KNOWN_WIDGETS))}. "
+                f"For a live/editable list of rows there is NO widget: serve "
+                f"your own page and point an `iframe` at it."
+            )
             continue
         if wtype == "collapsible":
             check_widgets(widget.get("widgets"), f"{where} > collapsible")
         if wtype == "list" and widget.get("bind"):
-            fail(f"{where}: `list` renders STATIC items from the spec and has "
-                 f"no `bind` — use an `iframe` onto your own route instead.")
+            fail(
+                f"{where}: `list` renders STATIC items from the spec and has "
+                f"no `bind` — use an `iframe` onto your own route instead."
+            )
         if wtype == "form":
             for field in widget.get("fields", []) or []:
                 itype = field.get("input", "text")
                 if itype in DEGRADES_TO_TEXT:
-                    warn(f"{where}: form input {itype!r} renders as a plain "
-                         f"text box (no numeric keyboard, no min/max) and the "
-                         f"value arrives as a string.")
+                    warn(
+                        f"{where}: form input {itype!r} renders as a plain "
+                        f"text box (no numeric keyboard, no min/max) and the "
+                        f"value arrives as a string."
+                    )
                 elif itype not in KNOWN_FORM_INPUTS:
-                    fail(f"{where}: form input {itype!r} is not implemented "
-                         f"(supported: {', '.join(sorted(KNOWN_FORM_INPUTS))} "
-                         f"— anything else falls back to a text box).")
+                    fail(
+                        f"{where}: form input {itype!r} is not implemented "
+                        f"(supported: {', '.join(sorted(KNOWN_FORM_INPUTS))} "
+                        f"— anything else falls back to a text box)."
+                    )
                 if itype == "select":
                     for opt in field.get("options", []) or []:
                         if not isinstance(opt, str):
-                            fail(f"{where}: `select` options must be plain "
-                                 f"strings; {opt!r} renders as [object Object].")
+                            fail(
+                                f"{where}: `select` options must be plain "
+                                f"strings; {opt!r} renders as [object Object]."
+                            )
 
 
 for win in windows:
@@ -225,9 +248,11 @@ for panel in contributes.get("settings_panels", []) or []:
     if target not in window_ids:
         fail(f"settings_panel {panel['id']!r} points at unknown window {target!r}")
     elif target not in declarative_window_ids:
-        fail(f"settings_panel {panel['id']!r} points at window {target!r}, which "
-             f"is not `declarative`. The Settings pane reads body.spec_data and "
-             f"will render EMPTY for a component/managed_app window.")
+        fail(
+            f"settings_panel {panel['id']!r} points at window {target!r}, which "
+            f"is not `declarative`. The Settings pane reads body.spec_data and "
+            f"will render EMPTY for a component/managed_app window."
+        )
 
 # ── report ──────────────────────────────────────────────────────────────────
 
@@ -239,5 +264,7 @@ if errors:
         print(f"FAIL: {e}", file=sys.stderr)
     sys.exit(1)
 
-print("OK: aw-app.json is valid, every referenced file exists, and all "
-      "declarative widgets are ones the renderer implements")
+print(
+    "OK: aw-app.json is valid, every referenced file exists, and all "
+    "declarative widgets are ones the renderer implements"
+)

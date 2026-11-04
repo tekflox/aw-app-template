@@ -13,12 +13,13 @@ across apt/binary-download/corepack/git-clone installers).
 
 Run: .venv/aw/bin/python -m pytest tests/test_installer.py -q
 """
+
 from __future__ import annotations
 
 import sys
 import unittest
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
