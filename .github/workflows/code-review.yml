@@ -92,7 +92,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.0
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.1
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
@@ -111,12 +111,23 @@ jobs:
       # (`startsWith(github.repository, 'tekflox/')`); code-review never did,
       # and this conversion does not change that.
     # Declared here as well as in the called workflow: for a reusable workflow
-    # the effective GITHUB_TOKEN permissions are the INTERSECTION of the two.
+    # the effective GITHUB_TOKEN permissions are the INTERSECTION of the two,
+    # so a scope omitted here cannot be granted by the shared file.
     permissions:
       contents: read
       pull-requests: write
       issues: write
       statuses: write
+      # Not load-bearing on THIS repo, and listed anyway so all three callers
+      # share one block. The merge gate reads the PR's checks with `gh pr
+      # checks`, which goes through the Checks API; a PRIVATE repo refuses
+      # that read without this scope and returns an empty list rather than an
+      # error, so the gate reports `required check(s) ['coverage'] did not
+      # report a pass ... Saw: []` every round. This repo is public, which is
+      # exactly why it merged first try on v1.1.0 while the private AP-MT
+      # failed four consecutive rounds on identical code. Anything forked
+      # from this template into a private repo inherits that trap otherwise.
+      checks: read
     # Passed BY NAME, never `secrets: inherit`. `inherit` does not cross an
     # ACCOUNT boundary — GitHub: "workflows that call reusable workflows in
     # the same organization or enterprise can use the `inherit` keyword" —
