@@ -15,7 +15,7 @@ name: Code Review
 # the `--auto` note further down.
 #
 # ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
-# `@v1.1.0` is immutable and never retagged. The cautionary precedent is in
+# `@v1.1.1` is immutable and never retagged. The cautionary precedent is in
 # this very repo: `release.yml` calls
 # `tekflox/aw-marketplace/.../app-release.yml@master`, a deliberately moving
 # ref shared by ~45 app repos, and one fail-loud edit there reddened the whole
@@ -36,7 +36,20 @@ name: Code Review
 #           inherited fine, so nothing else in the rollout would have caught
 #           it. See the `secrets:` block at the bottom of this file.
 #
-# Neither v1.0.0 nor v1.0.1 was retagged; both remain published as they were.
+# No tag has ever been retagged; all remain published as they were.
+#
+# ── THE LIMIT OF THE CANARY MODEL, FOUND THE HARD WAY ─────────────────────
+# v1.1.1 is the counter-example, and worth keeping in mind before trusting a
+# green run here as proof for everyone. Its bug — a missing `checks: read`
+# making the merge gate read the PR's checks as an empty list — is invisible
+# on a PUBLIC repo, because a public repo's check rollup is readable without
+# the scope. This repo is public. It merged on v1.1.0 first try while the
+# private AP-MT failed four consecutive rounds on identical code.
+#
+# So this canary proves a tag against a public, `tekflox/*`-owned consumer.
+# It cannot prove anything that depends on being private, and the rollout
+# order should treat a private consumer as a second, independent canary
+# rather than as a follower.
 #
 # ── WHAT CHANGED IN BEHAVIOUR, DELIBERATELY ───────────────────────────────
 # One thing, decided and not to be relitigated here: the merge is now a plain
