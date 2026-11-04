@@ -93,15 +93,27 @@ name: Code Review
 #           Only reading both sides finds it, which is why v1.1.2 adds a
 #           test that compares the two permission lists.
 #
+#   v1.3.0  the first tag whose CALLER CONTRACT changed, not just its
+#           internals: the `on:` block below grew `synchronize` and a
+#           `workflow_run` trigger, and the concurrency group grew a third
+#           arm. Those must land in the SAME PR as the pin bump — a caller on
+#           v1.3.0 without them still reviews and still merges the easy case,
+#           and silently loses both of the behaviours the release is for.
+#           This canary therefore costs TWO PRs: `workflow_run` only fires
+#           for a trigger definition already on the DEFAULT BRANCH, so the PR
+#           that adds it cannot exercise what it enables.
+#
 # ── WHAT CHANGED IN BEHAVIOUR, DELIBERATELY ───────────────────────────────
 # One thing, decided and not to be relitigated here: the merge is now a plain
 # `gh pr merge --squash`, where this file previously used `--squash --auto`.
 # `--auto` only pauses for checks that BRANCH PROTECTION marks required, and
 # this repo has none (verified 2026-11-04: the protection API returns
 # "Branch not protected"), so it was never actually waiting on anything. The
-# shared workflow's `ci_gate` does that job explicitly instead, and the merge
-# step runs only once it has SUCCEEDED — so the head SHA is already green by
-# then. Direct push to master stays available as the break-glass path.
+# shared workflow reads this repo's checks explicitly instead — as of v1.3.0
+# in its `merge-attempt` job, which refuses to merge unless `coverage` has
+# reported a pass on the exact head SHA the review cleared. That read is the
+# ONLY thing between a red suite and a squash-merge here. Direct push to
+# master stays available as the break-glass path.
 #
 # ── WHAT DID NOT CHANGE ───────────────────────────────────────────────────
 # `ai-review.yml` is not touched by this change, at all — same as when this
@@ -114,40 +126,78 @@ name: Code Review
 # impossible BY CONSTRUCTION. Keeping the caller a separate file preserves
 # that property exactly.
 #
-# The trigger surface still deliberately excludes `synchronize`: a full deep
-# review (one judge run plus up to 3 research runs) costs real subscription
-# budget, and PR-Agent already reviews every push. Re-triggering after
-# further pushes is `/aw-review` on demand. `/aw-improve` remains the
-# lighter-weight sibling command — both are parsed by the shared workflow's
-# gate, unchanged.
+# ── THE TRIGGER SURFACE, AND WHY IT GREW IN v1.3.0 ────────────────────────
+# `synchronize` was deliberately absent here for four releases, for a real
+# reason that has NOT gone away: a full deep review (one judge run plus up to
+# 3 research runs) costs real subscription budget, and PR-Agent already
+# reviews every push. "Review every push" was never the ask.
+#
+# What v1.3.0 adds is narrower than that. The shared gate admits a
+# `synchronize` ONLY when the PR already carries `devteam:awaiting-fixes` —
+# i.e. the coder's fix push, which is precisely the event round 2 was sitting
+# and waiting for. Anything else is refused after a single label read, before
+# any paid run. So the budget rationale above is preserved in the gate rather
+# than in this trigger list, and the manual step it replaces (`/aw-review`
+# after every fix push) is gone. `/aw-review` itself is untouched and remains
+# the override from any round; `/aw-improve` remains the lighter-weight
+# sibling command. Both are still parsed by the shared gate.
+#
+# `workflow_run` is the other half, and it is what lets the merge stop
+# polling. The shared workflow's `merge-attempt` job re-attempts the merge
+# when THIS repo's own CI finishes, however long that takes — replacing a
+# 20-minute `gh pr checks` loop that gave up at the deadline. `workflows:`
+# takes the CI workflow's `name:` (the string at the top of `test.yml`), NOT
+# its filename and NOT its job id. Rename that workflow and nothing fails
+# loudly; the event simply stops arriving and merges whose CI finishes after
+# the review verdict quietly stop happening.
+#
+# The `|| github.event.workflow_run.head_branch` arm of the concurrency group
+# below is required alongside it: a workflow_run event has neither
+# `pull_request.number` nor `issue.number`, so without it every workflow_run
+# run in this repo collapses into the single group `code-review-` and, with
+# `cancel-in-progress: false`, queues one at a time.
 #
 # ── ONE TRAP, IF YOU ARE EDITING *THIS FILE* IN A PR ──────────────────────
-# `pull_request` runs this file's PR copy (round 1 sees your edits live);
-# `issue_comment` (`/aw-review`, round 2) always runs the DEFAULT BRANCH's
-# copy. So the PR that introduces this conversion — and any later PR that only
-# bumps the `@vX.Y.Z` pin — CANNOT exercise its own round 2. Verify round 2 on
-# the NEXT PR after merge; don't burn time "debugging" that.
+# `pull_request` runs this file's PR copy (rounds 1 and 2 both see your edits
+# live). `issue_comment` (`/aw-review`) and `workflow_run` BOTH always run the
+# DEFAULT BRANCH's copy. So the PR that introduces this conversion — and any
+# later PR that only bumps the `@vX.Y.Z` pin or edits this trigger list —
+# CANNOT exercise its own comment path or its own workflow_run path. Verify
+# those on the NEXT PR after merge; don't burn time "debugging" them. That is
+# exactly why the v1.3.0 canary is two PRs: this one lands the triggers, the
+# next one proves the event hop.
 
 on:
   pull_request:
+    # `synchronize` -> automatic round 2 on the coder's fix push; the shared
+    # gate refuses it on any other round. See the trigger note above.
+    #
     # `closed` is here only for the shared workflow's merged-event job; its
     # gate job excludes `closed` explicitly, so a close never dispatches a
     # review.
-    types: [opened, reopened, ready_for_review, closed]
+    types: [opened, reopened, ready_for_review, synchronize, closed]
   issue_comment:
     types: [created]
+  # This repo's own CI, BY ITS `name:` — `.github/workflows/test.yml` starts
+  # with `name: Test`. Confirm with
+  #   gh api repos/tekflox/aw-app-template/actions/workflows \
+  #     --jq '.workflows[].name'
+  # rather than trusting the filename.
+  workflow_run:
+    workflows: ["Test"]
+    types: [completed]
 
 # Stays in the caller, not in the reusable workflow, for two reasons: a
 # reusable workflow's own `concurrency` would key on the SHARED file's
 # identity (collapsing unrelated repos into one queue), and this specific
 # group string is load-bearing here — see the ai-review.yml note above.
 concurrency:
-  group: code-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  group: code-review-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.head_branch }}
   cancel-in-progress: false
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.2.1
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.3.0
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
