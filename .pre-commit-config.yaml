@@ -22,6 +22,13 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+        # Default types_or for this hook also includes `markdown` (it
+        # formats fenced python code blocks in docs) — overridden to
+        # `python` only so a commit touching docs/skills markdown never
+        # reformats an unrelated code snippet inside it. §6b's one-time
+        # format commit covered template_app/tests specifically; this hook
+        # should keep matching that scope, not the lint hook's wider one.
+        types: [python]
 
   - repo: local
     hooks:
