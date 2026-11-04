@@ -15,7 +15,7 @@ name: Code Review
 # the `--auto` note further down.
 #
 # ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
-# `@v1.0.1` is immutable and never retagged. The cautionary precedent is in
+# `@v1.1.0` is immutable and never retagged. The cautionary precedent is in
 # this very repo: `release.yml` calls
 # `tekflox/aw-marketplace/.../app-release.yml@master`, a deliberately moving
 # ref shared by ~45 app repos, and one fail-loud edit there reddened the whole
@@ -23,9 +23,20 @@ name: Code Review
 #
 # This repo is the designated CANARY for those bumps — the oldest and most
 # exercised consumer. A new tag lands here first and is proven on a real PR
-# before the other callers move. It earned that role immediately: converting
-# this file is what caught the v1.0.0 bug that became v1.0.1 (see
-# `ci_check_name` note below).
+# before the other callers move. It earned that role twice over on its very
+# first use, and BOTH bugs were ones only this repo could have surfaced:
+#
+#   v1.0.1  the merge gate's advisory set had lost `CodeRabbit` (see the
+#           `ci_check_name` note below). Only this repo has that app
+#           installed.
+#   v1.1.0  `secrets: inherit` silently delivered an EMPTY
+#           AW_CODEREVIEW_V1_KEY, because `inherit` does not cross an account
+#           boundary and this repo is `tekflox/*` while the shared workflow
+#           is `fredericowu/*`. The other two callers are same-owner and
+#           inherited fine, so nothing else in the rollout would have caught
+#           it. See the `secrets:` block at the bottom of this file.
+#
+# Neither v1.0.0 nor v1.0.1 was retagged; both remain published as they were.
 #
 # ── WHAT CHANGED IN BEHAVIOUR, DELIBERATELY ───────────────────────────────
 # One thing, decided and not to be relitigated here: the merge is now a plain
@@ -81,7 +92,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.0.1
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.0
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
@@ -106,8 +117,21 @@ jobs:
       pull-requests: write
       issues: write
       statuses: write
-    # The shared workflow declares no `secrets:` block and reads
-    # AW_CODEREVIEW_V1_KEY / AW_DEVTEAM_MERGE_TOKEN / AW_DEVTEAM_EVENT_SECRET
-    # as inherited, each with an explicit fail-loud branch for "unset". All
-    # three are already set on this repo.
-    secrets: inherit
+    # Passed BY NAME, never `secrets: inherit`. `inherit` does not cross an
+    # ACCOUNT boundary — GitHub: "workflows that call reusable workflows in
+    # the same organization or enterprise can use the `inherit` keyword" —
+    # and when it does not apply it fails SILENTLY, yielding an empty string
+    # rather than an error.
+    #
+    # Measured on THIS repo, PR #16: with `inherit`, AW_CODEREVIEW_V1_KEY
+    # arrived at the shared workflow as an EMPTY STRING even though it IS set
+    # here — because this repo is `tekflox/*` and the shared workflow is
+    # `fredericowu/*`. Named passing is ownership-independent.
+    #
+    # The shared workflow still reads each with an explicit fail-loud branch
+    # for "unset", so a genuinely missing one names itself in CI. All three
+    # are already set on this repo.
+    secrets:
+      AW_CODEREVIEW_V1_KEY: ${{ secrets.AW_CODEREVIEW_V1_KEY }}
+      AW_DEVTEAM_MERGE_TOKEN: ${{ secrets.AW_DEVTEAM_MERGE_TOKEN }}
+      AW_DEVTEAM_EVENT_SECRET: ${{ secrets.AW_DEVTEAM_EVENT_SECRET }}
