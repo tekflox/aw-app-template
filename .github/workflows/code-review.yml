@@ -15,7 +15,7 @@ name: Code Review
 # the `--auto` note further down.
 #
 # ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
-# `@v1.1.2` is immutable and never retagged. The cautionary precedent is in
+# `@v1.1.4` is immutable and never retagged. The cautionary precedent is in
 # this very repo: `release.yml` calls
 # `tekflox/aw-marketplace/.../app-release.yml@master`, a deliberately moving
 # ref shared by ~45 app repos, and one fail-loud edit there reddened the whole
@@ -35,6 +35,35 @@ name: Code Review
 #           is `fredericowu/*`. The other two callers are same-owner and
 #           inherited fine, so nothing else in the rollout would have caught
 #           it. See the `secrets:` block at the bottom of this file.
+#
+#   v1.1.4  the merge gate could die with NO diagnostic at all. Two defects,
+#           both inherited verbatim from this file's own pre-conversion
+#           ancestor: `gh pr checks` was called with no `timeout=`, so a hung
+#           call blocked the gate step silently; and the job's
+#           `timeout-minutes` equalled the gate's own 20-minute deadline, so
+#           the job was killed before the gate could reach that deadline and
+#           print why it was waiting. Found on AP-MT PR #6, where a round 2
+#           that had PASSED with zero findings sat in that call for 17m53s,
+#           emitted nothing between `##[endgroup]` and `The operation was
+#           canceled`, and cost a full paid review cycle.
+#
+# ── v1.1.3 IS A DUD. NEVER PIN IT. ────────────────────────────────────────
+# It points at the same commit as v1.1.2 and carries none of the fix it was
+# cut for: a quoting error made the `git commit` fail while the `git tag` and
+# both pushes succeeded, so the tag landed on an unchanged HEAD. Content is
+# identical to v1.1.2, so pinning it is misleading rather than broken.
+#
+# It was NOT repaired by re-pointing the tag, because the shared repo's tag
+# ruleset refuses that for everyone including the owner. That is the
+# immutability rule working as designed and costing exactly what it is meant
+# to cost: a burned version number instead of rewritten history under three
+# consumers. The fix shipped as v1.1.4.
+#
+# The practice that would have caught it, now standard: after cutting a tag,
+# verify the TAG'S CONTENT, not just that the push succeeded —
+#   gh api repos/fredericowu/aw-shared-workflows/contents/\
+#     .github/workflows/code-review-reusable.yml?ref=vX.Y.Z -q .content \
+#     | base64 -d | grep <something the release changed>
 #
 # No tag has ever been retagged; all remain published as they were.
 #
@@ -118,7 +147,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.2
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.4
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
