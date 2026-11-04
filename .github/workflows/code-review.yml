@@ -147,7 +147,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.1.4
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.2.1
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
@@ -189,6 +189,14 @@ jobs:
       # failed four consecutive rounds on identical code. Anything forked
       # from this template into a private repo inherits that trap otherwise.
       checks: read
+      # SAME non-load-bearing-here-but-shared-block story as checks: read
+      # above, for a separate, later-discovered scope gap: `gh pr checks`
+      # always embeds checkSuite{workflowRun{...}} in its GraphQL query (gh
+      # v2.97.0), which needs actions: read, not checks: read. Public repos'
+      # rollups are readable without it; the private AP-MT hit a
+      # deterministic GraphQL 403 on every poll for 20 minutes despite green
+      # CI. See fredericowu/aw-shared-workflows#1.
+      actions: read
     # Passed BY NAME, never `secrets: inherit`. `inherit` does not cross an
     # ACCOUNT boundary — GitHub: "workflows that call reusable workflows in
     # the same organization or enterprise can use the `inherit` keyword" —
