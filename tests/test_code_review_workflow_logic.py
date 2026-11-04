@@ -25,6 +25,7 @@ the kind of incidental coupling that makes a test the first thing someone
 deletes. Nothing here imports `template_app`, so none of it affects the
 100% coverage gate (``[tool.coverage.run] source = ["template_app"]``).
 """
+
 from __future__ import annotations
 
 import json
@@ -35,20 +36,20 @@ from pathlib import Path
 
 import pytest
 
-WORKFLOW = (Path(__file__).resolve().parents[1]
-            / ".github" / "workflows" / "code-review.yml")
+WORKFLOW = Path(__file__).resolve().parents[1] / ".github" / "workflows" / "code-review.yml"
 
 
 # --------------------------------------------------------------------------
 # extraction
 # --------------------------------------------------------------------------
 
+
 def _dedent_block(block: str) -> str:
     """Strip the common leading indentation a YAML heredoc carries."""
     lines = block.split("\n")
-    widths = [len(l) - len(l.lstrip()) for l in lines if l.strip()]
+    widths = [len(line) - len(line.lstrip()) for line in lines if line.strip()]
     pad = min(widths) if widths else 0
-    return "\n".join(l[pad:] if len(l) >= pad else l for l in lines)
+    return "\n".join(line[pad:] if len(line) >= pad else line for line in lines)
 
 
 def _extract_heredoc(marker_before: str) -> str:
@@ -97,8 +98,10 @@ def fake_gh(tmp_path_factory) -> Path:
 # merge eligibility
 # --------------------------------------------------------------------------
 
-def _run_eligibility(script: Path, tmp_path, fake_gh, *, findings, counts,
-                     round_: str, is_draft: str = "false") -> dict:
+
+def _run_eligibility(
+    script: Path, tmp_path, fake_gh, *, findings, counts, round_: str, is_draft: str = "false"
+) -> dict:
     """Drive the real step script and return its GITHUB_OUTPUT as a dict.
 
     Writes `dispatch_response.json` under this call's own `tmp_path` and
@@ -111,45 +114,79 @@ def _run_eligibility(script: Path, tmp_path, fake_gh, *, findings, counts,
     tmp_path is already unique per call, so this isolates each invocation
     the same way RUNNER_TEMP isolates each real job.
     """
-    (tmp_path / "dispatch_response.json").write_text(json.dumps(
-        {"choices": [{"message": {"content":
-            "Here is my review:\n```json\n" + json.dumps(
-                {"findings": findings, "counts": counts}) + "\n```"}}]}))
+    (tmp_path / "dispatch_response.json").write_text(
+        json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {
+                            "content": "Here is my review:\n```json\n"
+                            + json.dumps({"findings": findings, "counts": counts})
+                            + "\n```"
+                        }
+                    }
+                ]
+            }
+        )
+    )
     out = tmp_path / "gh_output"
     out.write_text("")
-    env = {**os.environ,
-           "PATH": f"{fake_gh}{os.pathsep}{os.environ['PATH']}",
-           "REPO": "tekflox/aw-app-template", "PR_NUMBER": "42",
-           "HEAD_SHA": "a" * 40, "ROUND": round_, "IS_DRAFT": is_draft,
-           "GITHUB_OUTPUT": str(out), "GH_TOKEN": "fake",
-           "RUNNER_TEMP": str(tmp_path)}
-    proc = subprocess.run([sys.executable, str(script)],
-                          capture_output=True, text=True, env=env)
+    env = {
+        **os.environ,
+        "PATH": f"{fake_gh}{os.pathsep}{os.environ['PATH']}",
+        "REPO": "tekflox/aw-app-template",
+        "PR_NUMBER": "42",
+        "HEAD_SHA": "a" * 40,
+        "ROUND": round_,
+        "IS_DRAFT": is_draft,
+        "GITHUB_OUTPUT": str(out),
+        "GH_TOKEN": "fake",
+        "RUNNER_TEMP": str(tmp_path),
+    }
+    proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, env=env)
     assert proc.returncode == 0, f"step script failed:\n{proc.stderr[-2000:]}"
-    return dict(line.split("=", 1)
-                for line in out.read_text().splitlines() if "=" in line)
+    return dict(line.split("=", 1) for line in out.read_text().splitlines() if "=" in line)
 
 
 MINOR = {"severity": "low", "title": "unused import", "file": "a.py", "line": 3, "body": "x"}
 # severity=high but NOT blocking, and severity=medium but blocking: the pair
 # that proves `blocks_merge` is the gate and `severity` is not.
-HIGH_NON_BLOCKING = {"severity": "high", "title": "confusing name", "file": "a.py",
-                     "line": 9, "body": "x", "blocks_merge": False}
-MEDIUM_BLOCKING = {"severity": "medium", "title": "SQL injection", "file": "b.py",
-                   "line": 20, "body": "x", "blocks_merge": True}
-NO_BLOCKS_FIELD = {"severity": "low", "title": "judge omitted the field",
-                   "file": "c.py", "line": 1, "body": "x"}
+HIGH_NON_BLOCKING = {
+    "severity": "high",
+    "title": "confusing name",
+    "file": "a.py",
+    "line": 9,
+    "body": "x",
+    "blocks_merge": False,
+}
+MEDIUM_BLOCKING = {
+    "severity": "medium",
+    "title": "SQL injection",
+    "file": "b.py",
+    "line": 20,
+    "body": "x",
+    "blocks_merge": True,
+}
+NO_BLOCKS_FIELD = {
+    "severity": "low",
+    "title": "judge omitted the field",
+    "file": "c.py",
+    "line": 1,
+    "body": "x",
+}
 CROSS_CUTTING = {"severity": "info", "title": "architecture note", "body": "no file/line"}
 
 
 def test_round1_merges_only_on_zero_findings(eligibility_script, tmp_path, fake_gh):
-    clean = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                             findings=[], counts={}, round_="1")
+    clean = _run_eligibility(
+        eligibility_script, tmp_path, fake_gh, findings=[], counts={}, round_="1"
+    )
     assert clean["eligible"] == "true"
     assert clean["findings_count"] == "0"
 
-    dirty = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                             findings=[MINOR], counts={"low": 1}, round_="1")
+    dirty = _run_eligibility(
+        eligibility_script, tmp_path, fake_gh, findings=[MINOR], counts={"low": 1}, round_="1"
+    )
     assert dirty["eligible"] == "false", "any round-1 finding must wake the coder"
     assert dirty["findings_count"] == "1"
 
@@ -157,23 +194,39 @@ def test_round1_merges_only_on_zero_findings(eligibility_script, tmp_path, fake_
 def test_round1_counts_a_cross_cutting_finding(eligibility_script, tmp_path, fake_gh):
     """A finding with no file/line is posted as a top-level comment; it still
     counts, or a purely architectural objection would merge straight through."""
-    got = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                           findings=[CROSS_CUTTING], counts={"info": 1}, round_="1")
+    got = _run_eligibility(
+        eligibility_script,
+        tmp_path,
+        fake_gh,
+        findings=[CROSS_CUTTING],
+        counts={"info": 1},
+        round_="1",
+    )
     assert got["eligible"] == "false"
     assert got["findings_count"] == "1"
 
 
 def test_round2_gate_is_blocks_merge_and_not_severity(eligibility_script, tmp_path, fake_gh):
     """The core of the round-2 rule, in both directions."""
-    high_but_fine = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                                     findings=[HIGH_NON_BLOCKING],
-                                     counts={"high": 1}, round_="2")
+    high_but_fine = _run_eligibility(
+        eligibility_script,
+        tmp_path,
+        fake_gh,
+        findings=[HIGH_NON_BLOCKING],
+        counts={"high": 1},
+        round_="2",
+    )
     assert high_but_fine["eligible"] == "true", "severity must not block round 2"
     assert high_but_fine["blocking_count"] == "0"
 
-    medium_but_blocking = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                                           findings=[HIGH_NON_BLOCKING, MEDIUM_BLOCKING],
-                                           counts={"high": 1, "medium": 1}, round_="2")
+    medium_but_blocking = _run_eligibility(
+        eligibility_script,
+        tmp_path,
+        fake_gh,
+        findings=[HIGH_NON_BLOCKING, MEDIUM_BLOCKING],
+        counts={"high": 1, "medium": 1},
+        round_="2",
+    )
     assert medium_but_blocking["eligible"] == "false"
     assert medium_but_blocking["blocking_count"] == "1"
 
@@ -181,24 +234,33 @@ def test_round2_gate_is_blocks_merge_and_not_severity(eligibility_script, tmp_pa
 def test_round2_missing_blocks_merge_fails_closed(eligibility_script, tmp_path, fake_gh):
     """Schema drift must escalate to a human, never silently merge over a
     finding nobody judged."""
-    got = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                           findings=[NO_BLOCKS_FIELD], counts={"low": 1}, round_="2")
+    got = _run_eligibility(
+        eligibility_script,
+        tmp_path,
+        fake_gh,
+        findings=[NO_BLOCKS_FIELD],
+        counts={"low": 1},
+        round_="2",
+    )
     assert got["eligible"] == "false"
     assert got["blocking_count"] == "1"
     assert got["missing_blocks_merge"] == "1"
 
 
 def test_round2_clean_is_eligible(eligibility_script, tmp_path, fake_gh):
-    got = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                           findings=[], counts={}, round_="2")
+    got = _run_eligibility(
+        eligibility_script, tmp_path, fake_gh, findings=[], counts={}, round_="2"
+    )
     assert got["eligible"] == "true"
 
 
 @pytest.mark.parametrize("round_", ["needs-human", "informational"])
-def test_terminal_and_informational_rounds_never_merge(eligibility_script, tmp_path,
-                                                       fake_gh, round_):
-    got = _run_eligibility(eligibility_script, tmp_path, fake_gh,
-                           findings=[], counts={}, round_=round_)
+def test_terminal_and_informational_rounds_never_merge(
+    eligibility_script, tmp_path, fake_gh, round_
+):
+    got = _run_eligibility(
+        eligibility_script, tmp_path, fake_gh, findings=[], counts={}, round_=round_
+    )
     assert got["eligible"] == "false"
 
 
@@ -207,22 +269,38 @@ def test_a_draft_pr_is_never_merge_eligible(eligibility_script, tmp_path, fake_g
     """`opened` fires for a PR created as a draft, so without this a clean
     review un-drafted and merged somebody's work-in-progress."""
     for round_ in ("1", "2"):
-        got = _run_eligibility(eligibility_script, tmp_path, fake_gh, findings=[],
-                               counts={}, round_=round_, is_draft=draft)
+        got = _run_eligibility(
+            eligibility_script,
+            tmp_path,
+            fake_gh,
+            findings=[],
+            counts={},
+            round_=round_,
+            is_draft=draft,
+        )
         assert got["eligible"] == "false", f"draft merged on round {round_}"
 
 
 @pytest.mark.parametrize("not_draft", ["false", "False", ""])
-def test_a_non_draft_pr_is_unaffected_by_the_draft_guard(eligibility_script, tmp_path,
-                                                         fake_gh, not_draft):
-    got = _run_eligibility(eligibility_script, tmp_path, fake_gh, findings=[],
-                           counts={}, round_="1", is_draft=not_draft)
+def test_a_non_draft_pr_is_unaffected_by_the_draft_guard(
+    eligibility_script, tmp_path, fake_gh, not_draft
+):
+    got = _run_eligibility(
+        eligibility_script,
+        tmp_path,
+        fake_gh,
+        findings=[],
+        counts={},
+        round_="1",
+        is_draft=not_draft,
+    )
     assert got["eligible"] == "true"
 
 
 # --------------------------------------------------------------------------
 # round detection (the gate's label-driven state machine)
 # --------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def round_script(tmp_path_factory) -> Path:
@@ -232,36 +310,52 @@ def round_script(tmp_path_factory) -> Path:
     text = WORKFLOW.read_text()
     start = text.index("# ---- round, from the PR's LIVE labels ----")
     end = text.index('echo "round=$round is_draft=')
-    body = (text[start:end]
-            .replace("${{ github.repository }}", "tekflox/aw-app-template")
-            .replace('"$GITHUB_OUTPUT"', '/dev/null'))
+    body = (
+        text[start:end]
+        .replace("${{ github.repository }}", "tekflox/aw-app-template")
+        .replace('"$GITHUB_OUTPUT"', "/dev/null")
+    )
     assert "has_label" in body, "extracted the wrong fragment"
     path = tmp_path_factory.mktemp("wf") / "round.sh"
-    path.write_text("set -euo pipefail\npr_number=42\nmode=\"${MODE_IN}\"\n"
-                    + body + '\necho "FINAL_ROUND=$round"\n')
+    path.write_text(
+        'set -euo pipefail\npr_number=42\nmode="${MODE_IN}"\n'
+        + body
+        + '\necho "FINAL_ROUND=$round"\n'
+    )
     return path
 
 
-def _detect_round(script: Path, fake_gh, *, labels: str, mode: str = "review",
-                  fetch_fails: bool = False):
-    env = {**os.environ,
-           "PATH": f"{fake_gh}{os.pathsep}{os.environ['PATH']}",
-           "MODE_IN": mode, "FAKE_LABELS": labels,
-           "GH_LABELS_FAIL": "1" if fetch_fails else "0", "GH_TOKEN": "fake"}
+def _detect_round(
+    script: Path, fake_gh, *, labels: str, mode: str = "review", fetch_fails: bool = False
+):
+    env = {
+        **os.environ,
+        "PATH": f"{fake_gh}{os.pathsep}{os.environ['PATH']}",
+        "MODE_IN": mode,
+        "FAKE_LABELS": labels,
+        "GH_LABELS_FAIL": "1" if fetch_fails else "0",
+        "GH_TOKEN": "fake",
+    }
     proc = subprocess.run(["bash", str(script)], capture_output=True, text=True, env=env)
-    emitted = [l.split("=", 1)[1] for l in proc.stdout.splitlines()
-               if l.startswith("FINAL_ROUND=")]
+    emitted = [
+        line.split("=", 1)[1]
+        for line in proc.stdout.splitlines()
+        if line.startswith("FINAL_ROUND=")
+    ]
     return proc.returncode, (emitted[0] if emitted else None), proc.stdout + proc.stderr
 
 
-@pytest.mark.parametrize("labels,expected", [
-    ("", "1"),                                              # no labels at all
-    ("bug enhancement", "1"),                               # unrelated labels
-    ("devteam:awaiting-fixes", "2"),
-    ("devteam:needs-human", "needs-human"),
-    ("devteam:awaiting-fixes devteam:needs-human", "needs-human"),  # terminal wins
-    ("devteam:awaiting-fixes-but-not-really", "1"),         # exact match only
-])
+@pytest.mark.parametrize(
+    "labels,expected",
+    [
+        ("", "1"),  # no labels at all
+        ("bug enhancement", "1"),  # unrelated labels
+        ("devteam:awaiting-fixes", "2"),
+        ("devteam:needs-human", "needs-human"),
+        ("devteam:awaiting-fixes devteam:needs-human", "needs-human"),  # terminal wins
+        ("devteam:awaiting-fixes-but-not-really", "1"),  # exact match only
+    ],
+)
 def test_round_is_detected_from_live_labels(round_script, fake_gh, labels, expected):
     rc, round_, _ = _detect_round(round_script, fake_gh, labels=labels)
     assert rc == 0
@@ -276,14 +370,14 @@ def test_aw_improve_stays_outside_the_round_machine(round_script, fake_gh, label
     assert round_ == "informational"
 
 
-def test_an_unreadable_label_set_fails_loud_instead_of_defaulting_to_round_1(
-        round_script, fake_gh):
+def test_an_unreadable_label_set_fails_loud_instead_of_defaulting_to_round_1(round_script, fake_gh):
     """Empty output is a legitimate answer here (a PR with no labels IS round
     1), so "no labels" and "could not read the labels" must not look alike.
     Swallowing the error silently reset a mid-escalation PR to a fresh round 1
     and could loop, with nothing going red."""
-    rc, round_, log = _detect_round(round_script, fake_gh,
-                                    labels="devteam:needs-human", fetch_fails=True)
+    rc, round_, log = _detect_round(
+        round_script, fake_gh, labels="devteam:needs-human", fetch_fails=True
+    )
     assert rc != 0, "a failed label fetch must fail the gate"
     assert round_ is None, "no round may be emitted when the labels are unknown"
     assert "Refusing to guess the review round" in log
@@ -292,6 +386,7 @@ def test_an_unreadable_label_set_fails_loud_instead_of_defaulting_to_round_1(
 # --------------------------------------------------------------------------
 # invariants that are cheap to assert and expensive to rediscover
 # --------------------------------------------------------------------------
+
 
 def test_the_merge_step_never_un_drafts_a_pr():
     """`gh pr ready` here would convert a deliberately-draft PR to ready and
@@ -309,8 +404,8 @@ def test_the_merge_is_not_authenticated_with_github_token():
     workflows, so release.yml would silently stop firing — green CI, no more
     releases."""
     text = WORKFLOW.read_text()
-    merge_step = text[text.index("- name: Merge if eligible"):]
-    merge_step = merge_step[:merge_step.index("- name: ", 10)]
+    merge_step = text[text.index("- name: Merge if eligible") :]
+    merge_step = merge_step[: merge_step.index("- name: ", 10)]
     assert "AW_DEVTEAM_MERGE_TOKEN" in merge_step
     assert "secrets.GITHUB_TOKEN" not in merge_step
 
@@ -320,6 +415,6 @@ def test_the_merge_waits_on_the_repos_own_ci():
     master has none — so the merge must gate on CI itself."""
     text = WORKFLOW.read_text()
     assert "- name: Wait for the repo's own CI to be green" in text
-    merge_step = text[text.index("- name: Merge if eligible"):]
-    merge_step = merge_step[:merge_step.index("run: |")]
+    merge_step = text[text.index("- name: Merge if eligible") :]
+    merge_step = merge_step[: merge_step.index("run: |")]
     assert "steps.ci_gate.outcome == 'success'" in merge_step

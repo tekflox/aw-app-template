@@ -6,6 +6,7 @@ stricter automatically once someone builds the UI).
 
 Run: .venv/aw/bin/python -m pytest tests/test_standalone.py
 """
+
 from __future__ import annotations
 
 import sys
@@ -16,7 +17,7 @@ from fastapi.testclient import TestClient
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from template_app.__main__ import build_standalone_app, SLUG, UI_DIST  # noqa: E402
+from template_app.__main__ import SLUG, UI_DIST, build_standalone_app  # noqa: E402
 
 
 def test_standalone_app_boots_and_mounts_api():

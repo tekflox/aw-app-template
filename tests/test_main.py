@@ -6,6 +6,7 @@ uvicorn.run is mocked so this never actually binds a socket.
 
 Run: .venv/aw/bin/python -m pytest tests/test_main.py -q
 """
+
 from __future__ import annotations
 
 import sys

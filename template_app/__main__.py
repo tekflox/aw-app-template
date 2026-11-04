@@ -20,6 +20,7 @@ machinery, not app code (Decision 4). Default posture here is to bind
 deployment, check an env var (e.g. ``AW_APP_TOKEN``) inside your own routes
 — that's the app's responsibility, not the framework's.
 """
+
 from __future__ import annotations
 
 import os
@@ -56,8 +57,10 @@ app = build_standalone_app()
 
 def main() -> None:
     if not UI_DIST.is_dir():
-        print(f"NOTE: {UI_DIST} not built yet — run `npm run build` in ui/ first "
-              f"(API routes still work without it).")
+        print(
+            f"NOTE: {UI_DIST} not built yet — run `npm run build` in ui/ first "
+            f"(API routes still work without it)."
+        )
     port = int(os.environ.get("PORT", str(DEFAULT_PORT)))
     host = os.environ.get("AW_APP_HOST", "127.0.0.1")
     uvicorn.run(app, host=host, port=port)

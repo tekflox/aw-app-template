@@ -9,6 +9,7 @@ ctx.config, so that's all the double needs to implement.
 
 Run: .venv/aw/bin/python -m pytest tests/test_plugin.py -q
 """
+
 from __future__ import annotations
 
 import asyncio

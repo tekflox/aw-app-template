@@ -59,7 +59,9 @@ class TemplateAppPlugin:
             # cannot tell a working CLI from a broken one. See the
             # aw-create-app skill, "The installer contract".
             ctx.commands.install_system_cli(
-                cli["name"], cli["installer"], uninstall="scripts/uninstall.sh",
+                cli["name"],
+                cli["installer"],
+                uninstall="scripts/uninstall.sh",
                 verify=cli.get("verify"),
             )
             installed.append(cli["name"])
@@ -68,7 +70,8 @@ class TemplateAppPlugin:
 
         log.info(
             "aw-app-template activated: installed %s (greeting=%s), routes mounted",
-            installed, greeting,
+            installed,
+            greeting,
         )
 
     async def deactivate(self) -> None:

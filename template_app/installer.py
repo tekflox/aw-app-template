@@ -40,9 +40,7 @@ def _run_script(script: str, *, env_overrides: dict[str, str] | None = None) -> 
         env=env,
     )
     if result.returncode != 0:
-        raise InstallError(
-            f"{script} failed (exit {result.returncode}): {result.stderr.strip()}"
-        )
+        raise InstallError(f"{script} failed (exit {result.returncode}): {result.stderr.strip()}")
     return result.stdout.strip()
 
 

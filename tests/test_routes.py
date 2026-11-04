@@ -8,6 +8,7 @@ HTTP + WS against it directly, no framework runtime needed.
 
 Run: .venv/aw/bin/python -m pytest tests/test_routes.py
 """
+
 from __future__ import annotations
 
 import sys
