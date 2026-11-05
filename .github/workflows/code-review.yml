@@ -103,6 +103,22 @@ name: Code Review
 #           for a trigger definition already on the DEFAULT BRANCH, so the PR
 #           that adds it cannot exercise what it enables.
 #
+#   v1.4.0  adds `provenance-gate`, a new job between `gate` and
+#           `merge-attempt` that is now a hard merge blocker on every PR:
+#           it fails unless a commit carries a well-formed `AW-Run-Id`
+#           trailer (stamped by a `prepare-commit-msg` hook in the Dev
+#           Team's runner containers — a separate, still-in-progress card)
+#           or a human applies the `provenance-exempt` label. No caller-side
+#           change was needed here: it costs no new permission scope (its
+#           `gh api` calls — labels read, a commit status POST, a PR-body
+#           PATCH, issue-comment POST/PATCH — are all covered by scopes this
+#           file already grants) and no new trigger. The one thing THIS
+#           caller did need, done ahead of the bump: the `provenance-exempt`
+#           label created on this repo (`gh label create provenance-exempt
+#           --color 0E8A16 --repo tekflox/aw-app-template`), same as the two
+#           round labels a new caller needs per the shared workflow's own
+#           CALLER CHECKLIST.
+#
 # ── WHAT CHANGED IN BEHAVIOUR, DELIBERATELY ───────────────────────────────
 # One thing, decided and not to be relitigated here: the merge is now a plain
 # `gh pr merge --squash`, where this file previously used `--squash --auto`.
