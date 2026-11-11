@@ -23,6 +23,7 @@
     "tasks": [
       {
         "name": "Indexer — nightly rebuild",
+        "slug": "indexer-nightly-rebuild",
         "type": "agentic_output",
         "command": "indexer-cli rebuild --quiet",
         "notify_exit_codes": [1, 2],
