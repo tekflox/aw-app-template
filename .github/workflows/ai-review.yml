@@ -2,8 +2,8 @@ name: AI Review
 
 # Thin caller. PR-Agent's advisory review itself now lives in
 # fredericowu/aw-shared-workflows — read that file's header for the fork
-# threat model, why there is no checkout and no `runs_on` input, the
-# inference routing, and why `/improve` is on-demand only.
+# threat model, why there is no checkout, why `runs_on` defaults to
+# GitHub-hosted, the inference routing, and why `/improve` is on-demand only.
 #
 # This file USED to be that review, ~289 lines of it, and it was the ONLY
 # copy anywhere: AP-MT and aw-workspace never had one. That is what triggered
@@ -13,16 +13,25 @@ name: AI Review
 # moved across intact.
 #
 # ── WHY AN EXACT TAG, NOT @master ─────────────────────────────────────────
-# `@v1.2.0` is immutable and never retagged, for the reasons code-review.yml
+# `@v1.8.0` is immutable and never retagged, for the reasons code-review.yml
 # spells out at length (and `release.yml`'s own `app-release.yml@master` is
 # the cautionary precedent sitting in this very repo). Bumps are deliberate,
 # one caller at a time, and this repo is the designated canary.
 #
-# v1.2.0 is the tag that ADDS ai-review-reusable.yml. It changes nothing in
-# code-review-reusable.yml, so this PR deliberately does NOT bump
-# code-review.yml's own `@v1.1.4` pin: tags are immutable, so that pin is
-# under no pressure, and moving two things at once would make a canary
-# failure ambiguous.
+# v1.8.0 gives ai-review-reusable.yml the `runs_on` input its sibling has
+# carried since day one. THIS REPO DELIBERATELY PASSES NOTHING: the input
+# defaults to the JSON string `"ubuntu-latest"`, so the default path is
+# byte-compatible with v1.2.0's hardcoded literal, and this canary exists to
+# prove exactly that before the private caller opts into self-hosted. The
+# input is for private callers burning the Free-plan 20-job account-wide
+# hosted concurrency cap; this repo keeps the hosted default.
+#
+# v1.2.0 was the tag that ADDED ai-review-reusable.yml. The intervening tags
+# (v1.3.0 .. v1.7.0) touched the other two workflows only, which is why this
+# pin was under no pressure until now — one `v*` line serves three
+# independent files. This PR still does NOT bump code-review.yml's own pin:
+# tags are immutable, so it is under no pressure either, and moving two
+# things at once would make a canary failure ambiguous.
 #
 # Note the shared repo keeps ONE `v*` tag line for both workflows rather
 # than an `ai-v*` family — the ruleset that enforces tag immutability targets
@@ -86,10 +95,12 @@ concurrency:
 
 jobs:
   ai-review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/ai-review-reusable.yml@v1.2.0
-    # `api_base` left at its default
+    uses: fredericowu/aw-shared-workflows/.github/workflows/ai-review-reusable.yml@v1.8.0
+    # Both inputs left at their defaults: `api_base`
     # (https://agents-platform.aw.tekflox.com/v1), which is the literal this
-    # file carried before the conversion. It is the whole input surface.
+    # file carried before the conversion, and `runs_on`, whose default is the
+    # JSON string `"ubuntu-latest"` — see the tag note above for why this
+    # caller passes neither.
     #
     # Declared here as well as in the called workflow: the effective
     # GITHUB_TOKEN permissions are the INTERSECTION of the two, so a scope
