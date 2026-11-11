@@ -383,6 +383,10 @@ Complete, validating example manifests: [`examples/`](../../examples/).
   Schedule kinds: `once` (`at`), `daily` (`time`), `weekly` (`days` 0=Mon,
   `time`), `monthly` (`day_of_month`, `time`), `cron` (`expr`). Several are
   allowed; it fires on whichever comes first. An empty list = manual-only.
+  An optional `slug` (lowercase, digits, hyphens) gives the task a stable
+  identifier separate from both `name` (the identity above) and `agent_slug`
+  (which agent it dispatches to) — aw-app-tasks' REST/MCP surfaces let a
+  caller address the task by it instead of its opaque `task-<hex>` id.
 
 - **`agents`** — the Agents Platform objects the app's features need (needs
   `agents:contribute`). Identity is the **`slug`**, which is the platform's

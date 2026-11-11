@@ -51,7 +51,8 @@ Fields: `name` (**required**, and the identity — see below), `type`
 (default `terminal`), `command` (required for `agentic_output`), `prompt`
 (required for `terminal` and `agent_prompt`), `agent_slug` (**required for
 both `agent_prompt` AND `agentic_output`**), `reuse_session`, `cli_type`,
-`notify_exit_codes` (list or comma-string), `schedules`, `enabled`.
+`notify_exit_codes` (list or comma-string), `schedules`, `enabled`, `slug`
+(optional — see below).
 
 An `agent_prompt` **or `agentic_output`** task without an `agent_slug` is
 rejected at install time rather than seeded. `agentic_output` needs one for a
@@ -83,6 +84,48 @@ part of the app working at all.
 
 A task may carry several; it fires on whichever comes first. An empty
 `schedules` list means manual-only.
+
+## Stable task slugs — not to be confused with `agent_slug`
+
+`slug` is a second, unrelated field: a stable identifier **for the task
+itself**, lowercase letters/digits/hyphens starting with a letter (e.g.
+`"nightly-index-rebuild"`), separate from `agent_slug` (which Agents
+Platform agent a task dispatches to).
+
+```jsonc
+{
+  "name": "Nightly index rebuild",
+  "slug": "nightly-index-rebuild",
+  "type": "agentic_output",
+  "command": "myapp-cli reindex --quiet",
+  "schedules": [{ "kind": "daily", "time": "03:00" }]
+}
+```
+
+It exists because a task's real `id` (`task-<12 hex>`) is assigned at
+creation and opaque — fine for a caller that stores it, useless for
+anything that wants to hard-code which task it means: a doc, a script,
+another app's own declaration. A `slug` is how your app (or a user, through
+the Tasks UI) gives a task a name that survives across workspaces and
+reads of the task list.
+
+Optional — a task works exactly as before without one — and enforced
+**unique among tasks that are not deleted** by aw-app-tasks itself; a
+`slug` collision on your declaration fails only that one task (logged,
+skipped), same as any other bad entry in the list.
+
+Once set, aw-app-tasks' own REST and MCP surfaces let a caller address the
+task by it instead of by id:
+
+```
+GET  /api/apps/tasks/tasks/by-slug/{slug}
+POST /api/apps/tasks/tasks/by-slug/{slug}/run
+```
+
+and the `get_task`/`update_task`/`delete_task`/`run_task`/`open_task` MCP
+tools all accept `slug` as an alternative to `task_id` (`task_id` wins if
+you pass both — see that app's own docs for the full contract). Every
+id-based route and tool keeps working unchanged; `slug` is purely additive.
 
 ## Seeded, not owned
 
