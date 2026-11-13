@@ -189,8 +189,9 @@ name: Code Review
 
 on:
   pull_request:
-    # `synchronize` -> automatic round 2 on the coder's fix push; the shared
-    # gate refuses it on any other round. See the trigger note above.
+    # `synchronize` -> automatic round 2, or round needs-human (the coder's
+    # fix push on an escalated PR, since v1.10.0); the shared gate refuses it
+    # on any other round. See the trigger note above.
     #
     # `closed` is here only for the shared workflow's merged-event job; its
     # gate job excludes `closed` explicitly, so a close never dispatches a
