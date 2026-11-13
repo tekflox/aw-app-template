@@ -149,9 +149,13 @@ name: Code Review
 # reviews every push. "Review every push" was never the ask.
 #
 # What v1.3.0 adds is narrower than that. The shared gate admits a
-# `synchronize` ONLY when the PR already carries `devteam:awaiting-fixes` —
-# i.e. the coder's fix push, which is precisely the event round 2 was sitting
-# and waiting for. Anything else is refused after a single label read, before
+# `synchronize` ONLY when the PR already carries one of the fix-cycle labels
+# — `devteam:awaiting-fixes` (round 2) or, since v1.10.0,
+# `devteam:needs-human` — i.e. the coder's fix push, which is precisely the
+# event those rounds were sitting and waiting for. `needs-human` was added
+# because refusing it left the PREVIOUS commit's per-commit
+# `devteam/code-review` pass on display, reading as a green review of a fix
+# nothing had looked at. Anything else is refused after a single label read, before
 # any paid run. So the budget rationale above is preserved in the gate rather
 # than in this trigger list, and the manual step it replaces (`/aw-review`
 # after every fix push) is gone. `/aw-review` itself is untouched and remains
@@ -185,8 +189,9 @@ name: Code Review
 
 on:
   pull_request:
-    # `synchronize` -> automatic round 2 on the coder's fix push; the shared
-    # gate refuses it on any other round. See the trigger note above.
+    # `synchronize` -> automatic round 2, or round needs-human (the coder's
+    # fix push on an escalated PR, since v1.10.0); the shared gate refuses it
+    # on any other round. See the trigger note above.
     #
     # `closed` is here only for the shared workflow's merged-event job; its
     # gate job excludes `closed` explicitly, so a close never dispatches a
@@ -213,7 +218,7 @@ concurrency:
 
 jobs:
   review:
-    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.9.0
+    uses: fredericowu/aw-shared-workflows/.github/workflows/code-review-reusable.yml@v1.10.0
     with:
       # test.yml's job id on this repo. Verified against real `gh pr checks`
       # output (PRs #13-15), not read off the YAML — `ui-lint` is a second job
