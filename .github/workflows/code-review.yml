@@ -149,9 +149,13 @@ name: Code Review
 # reviews every push. "Review every push" was never the ask.
 #
 # What v1.3.0 adds is narrower than that. The shared gate admits a
-# `synchronize` ONLY when the PR already carries `devteam:awaiting-fixes` —
-# i.e. the coder's fix push, which is precisely the event round 2 was sitting
-# and waiting for. Anything else is refused after a single label read, before
+# `synchronize` ONLY when the PR already carries one of the fix-cycle labels
+# — `devteam:awaiting-fixes` (round 2) or, since v1.10.0,
+# `devteam:needs-human` — i.e. the coder's fix push, which is precisely the
+# event those rounds were sitting and waiting for. `needs-human` was added
+# because refusing it left the PREVIOUS commit's per-commit
+# `devteam/code-review` pass on display, reading as a green review of a fix
+# nothing had looked at. Anything else is refused after a single label read, before
 # any paid run. So the budget rationale above is preserved in the gate rather
 # than in this trigger list, and the manual step it replaces (`/aw-review`
 # after every fix push) is gone. `/aw-review` itself is untouched and remains
